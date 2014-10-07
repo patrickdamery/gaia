@@ -57,7 +57,8 @@ var HotspotWifiSettings = {
 
   updatePasswordItemVisibility: function(securityType) {
     var passwordItem = this.dialog.querySelector('.password');
-    passwordItem.hidden = (securityType == 'open');
+    var passwordDesc = this.dialog.querySelector('.password-description');
+    passwordItem.hidden = passwordDesc.hidden = (securityType == 'open');
   },
 
   // initialize all setting fields in the panel
@@ -130,4 +131,4 @@ var HotspotWifiSettings = {
   }
 };
 
-navigator.mozL10n.ready(HotspotWifiSettings.init.bind(HotspotWifiSettings));
+navigator.mozL10n.once(HotspotWifiSettings.init.bind(HotspotWifiSettings));

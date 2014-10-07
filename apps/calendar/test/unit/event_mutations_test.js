@@ -1,7 +1,11 @@
+/*global Factory */
+
 // Timespan is always loaded but not in the test
 requireLib('timespan.js');
 
 suiteGroup('EventMutations', function() {
+  'use strict';
+
   var subject;
   var app;
   var db;
@@ -12,14 +16,17 @@ suiteGroup('EventMutations', function() {
   var busytimeStore;
   var alarmStore;
   var componentStore;
+  var shouldDisplay;
 
   setup(function(done) {
-    this.timeout(5000);
-
     subject = Calendar.EventMutations;
     app = testSupport.calendar.app();
     db = app.db;
     controller = app.timeController;
+    shouldDisplay = controller._shouldDisplayBusytime;
+    controller._shouldDisplayBusytime = function() {
+      return true;
+    };
 
     eventStore = db.getStore('Event');
     busytimeStore = db.getStore('Busytime');
@@ -30,6 +37,7 @@ suiteGroup('EventMutations', function() {
   });
 
   teardown(function(done) {
+    controller._shouldDisplayBusytime = shouldDisplay;
     testSupport.calendar.clearStore(
       db,
       [
@@ -254,9 +262,9 @@ suiteGroup('EventMutations', function() {
       alarmStore.findAllByBusytimeId(busyId, function(err, values) {
         done(function() {
           assert.equal(values.length, expectedAlarms.length);
-          for (var i = 0, alarm; alarm = expectedAlarms[i]; i++) {
+          for (var i = 0; i < expectedAlarms.length; i++) {
             assert.equal(
-              event.remote.start.utc + alarm.trigger * 1000,
+              event.remote.start.utc + expectedAlarms[i].trigger * 1000,
               values[i].trigger.utc
             );
           }

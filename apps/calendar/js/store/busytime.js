@@ -1,7 +1,5 @@
 Calendar.ns('Store').Busytime = (function() {
-
-  var binsearch = Calendar.binsearch.find;
-  var bsearchForInsert = Calendar.binsearch.insert;
+  'use strict';
 
   /**
    * Objects saved in the busytime store:
@@ -18,6 +16,11 @@ Calendar.ns('Store').Busytime = (function() {
   function Busytime() {
     Calendar.Store.Abstract.apply(this, arguments);
     this._setupCache();
+
+    Calendar.Promise.denodeifyAll(this, [
+      'removeEvent',
+      'loadSpan'
+    ]);
   }
 
   Busytime.prototype = {
@@ -148,10 +151,11 @@ Calendar.ns('Store').Busytime = (function() {
         data = data.slice(0, idx);
 
         // fire callback
-        if (callback)
+        if (callback) {
           callback(null, data.map(function(item) {
             return self.initRecord(item);
           }));
+        }
 
       };
     },

@@ -4,13 +4,13 @@ requireLib('store/abstract.js');
 requireLib('store/setting.js');
 
 suite('store/setting', function() {
+  'use strict';
 
   var subject;
   var db;
   var app;
 
   setup(function(done) {
-    this.timeout(5000);
     app = testSupport.calendar.app();
     db = app.db;
     subject = db.getStore('Setting');
@@ -53,7 +53,7 @@ suite('store/setting', function() {
 
     setup(function(done) {
       subject.on(name + 'Change', function() {
-        calledEvent = arguments;
+        calledEvent = Array.slice(arguments);
       });
       subject.set(name, 'first', done);
     });

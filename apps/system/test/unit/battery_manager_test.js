@@ -4,17 +4,15 @@ requireApp('system/test/unit/mock_navigator_battery.js');
 requireApp('system/shared/test/unit/mocks/mock_settings_listener.js');
 requireApp('system/test/unit/mock_sleep_menu.js');
 requireApp('system/test/unit/mock_screen_manager.js');
-requireApp('system/test/unit/mock_gesture_detector.js');
-requireApp('system/test/unit/mock_l10n.js');
+require('/shared/test/unit/mocks/mock_gesture_detector.js');
+require('/shared/test/unit/mocks/mock_l10n.js');
 requireApp('system/js/battery_manager.js');
 
 var mocksForBatteryManager = new MocksHelper([
   'SettingsListener',
-  'SleepMenu',
+  'sleepMenu',
   'GestureDetector'
 ]).init();
-
-mocha.globals(['dispatchEvent']);
 
 suite('battery manager >', function() {
   var realBattery;
@@ -48,9 +46,14 @@ suite('battery manager >', function() {
       '<div id="system-overlay" data-z-index-level="system-overlay">' +
         '<div id="battery">' +
           '<span class="icon-battery"></span>' +
-          '<span class="battery-notification" ' +
-                 'data-l10n-id="battery-almost-empty">Battery almost empty' +
-          '</span>' +
+          '<div class="battery-notification"> ' +
+                '<span data-l10n-id="battery-almost-empty3">' +
+                  'Battery almost empty.' +
+                '</span>' +
+                '<span data-l10n-id="plug-in-your-charger">' +
+                  'Plug in your charger.' +
+                '</span>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
@@ -117,11 +120,10 @@ suite('battery manager >', function() {
 
       test('should send batteryshutdown when battery is below threshold',
       function() {
-        var dispatchEventStub = this.sinon.stub(window, 'dispatchEvent')
-          .throws('should send batteryshutdown event');
-        dispatchEventStub.withArgs(sinon.match.has('type', 'batteryshutdown'));
+        var dispatchEventStub = this.sinon.stub(window, 'dispatchEvent');
         sendLevelChange(0.00);
-        assert.isTrue(dispatchEventStub.called);
+        sinon.assert.calledWithMatch(window.dispatchEvent,
+                                     { type: 'batteryshutdown' });
       });
     });
 

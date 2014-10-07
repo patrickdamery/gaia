@@ -1,8 +1,36 @@
 (function(window) {
+  'use strict';
 
   function Store() {
     Calendar.Store.Abstract.apply(this, arguments);
+    this._usedColors = [];
+
+    Calendar.Promise.denodeifyAll(this, [
+      'markWithError',
+      'remotesByAccount',
+      'sync',
+      'providerFor',
+      'ownersOf'
+    ]);
   }
+
+  /**
+   * Remote calendar colors
+   */
+  Store.REMOTE_COLORS = [
+    '#00aacc', // light blue
+    '#bad600', // light green
+    '#df4784', // pink
+    '#f9bc17', // yellow
+    '#0766b7', // dark blue
+    '#76a408', // dark green
+    '#33a185'  // teal
+  ];
+
+  /**
+   * Local calendar color (orange)
+   */
+  Store.LOCAL_COLOR = '#f97c17',
 
   /**
    * List of possible calendar capabilities.
@@ -23,21 +51,7 @@
       'alarms', 'icalComponents'
     ],
 
-    _parseId: Calendar.Store.Abstract.prototype.probablyParseInt,
-
-    _addToCache: function(object) {
-      var remote = object.remote.id;
-
-      this._cached[object._id] = object;
-    },
-
-    _removeFromCache: function(id) {
-      if (id in this._cached) {
-        var object = this._cached[id];
-        var remote = object.remote.id;
-        delete this._cached[id];
-      }
-    },
+    _parseId: Calendar.probablyParseInt,
 
     _createModel: function(obj, id) {
       if (!(obj instanceof Calendar.Models.Calendar)) {
@@ -74,8 +88,9 @@
         trans = null;
       }
 
-      if (!calendar._id)
+      if (!calendar._id) {
         throw new Error('given calendar must be persisted.');
+      }
 
       calendar.error = {
         name: error.name,
@@ -83,6 +98,107 @@
       };
 
       this.persist(calendar, trans, callback);
+    },
+
+    persist: function(calendar, trans, callback) {
+      if (typeof(trans) === 'function') {
+        callback = trans;
+        trans = undefined;
+      }
+
+      this._updateCalendarColor(calendar);
+
+      var cb = callback;
+      var cached = this._cached[calendar._id];
+
+      if (cached && cached.localDisplayed !== calendar.localDisplayed) {
+        cb = function(err, id, model) {
+          this.emit('calendarVisibilityChange', id, model);
+          callback(err, id, model);
+        }.bind(this);
+      }
+
+      Calendar.Store.Abstract.prototype.persist.call(
+        this, calendar, trans, cb
+      );
+    },
+
+    remove: function(id, trans, callback) {
+      this._removeCalendarColorFromCache(id);
+      Calendar.Store.Abstract.prototype.remove.apply(this, arguments);
+    },
+
+    _updateCalendarColor: function(calendar) {
+      // we avoid storing multiple colors for same calendar in case of an
+      // "update" operation
+      this._removeCalendarColorFromCache(calendar._id);
+      this._setCalendarColor(calendar);
+      // cache is built asynchronously, we need to store the color as soon as
+      // possible to avoid adding same color multiple times in a row (eg.
+      // account with multiple calendars will call persist multiple times)
+      this._usedColors.push(calendar.color);
+    },
+
+    _removeCalendarColorFromCache: function(id) {
+      // we need to remove the color from index as soon as possible to avoid
+      // race conditions (remove is async)
+      var color = this._getCachedColorByCalendarId(id);
+      var index = this._usedColors.indexOf(color);
+      if (index !== -1) {
+        this._usedColors.splice(index, 1);
+      }
+    },
+
+    _getCachedColorByCalendarId: function(id) {
+      return this._cached[id] && this._cached[id].color;
+    },
+
+    _setCalendarColor: function(calendar) {
+      // local calendar should always use the same color
+      if (calendar._id === Calendar.Provider.Local.calendarId) {
+        calendar.color = Store.LOCAL_COLOR;
+        return;
+      }
+
+      // restore previous color only if it is part of the palette, otherwise we
+      // get the next available color (or least used)
+      var prevColor = this._getCachedColorByCalendarId(calendar._id);
+      if (prevColor && Store.REMOTE_COLORS.indexOf(prevColor) !== -1) {
+        calendar.color = prevColor;
+      } else {
+        calendar.color = this._getNextColor();
+      }
+    },
+
+    _getNextColor: function() {
+      var available = Store.REMOTE_COLORS.filter(function(color) {
+        return this._usedColors.indexOf(color) === -1;
+      }, this);
+
+      return available.length ? available[0] : this._getLeastUsedColor();
+    },
+
+    _getLeastUsedColor: function() {
+      var counter = {};
+      this._usedColors.forEach(function(color) {
+        counter[color] = (counter[color] || 0) + 1;
+      });
+
+      var leastUsedColor;
+      var leastUsedCount = Infinity;
+      for (var color in counter) {
+        if (counter[color] < leastUsedCount) {
+          leastUsedCount = counter[color];
+          leastUsedColor = color;
+        }
+      }
+
+      return leastUsedColor;
+    },
+
+    shouldDisplayCalendar: function(calendarId) {
+      var calendar = this._cached[calendarId];
+      return calendar && calendar.localDisplayed;
     },
 
     /**
@@ -100,7 +216,7 @@
       }
 
       if (!trans) {
-        var trans = this.db.transaction(this._store);
+        trans = this.db.transaction(this._store);
       }
 
       var store = trans.objectStore(this._store);
@@ -133,8 +249,6 @@
      *       inside of providers.
      */
     sync: function(account, calendar, callback) {
-      var self = this;
-      var store = this.db.getStore('Event');
       var provider = Calendar.App.provider(
         account.providerType
       );

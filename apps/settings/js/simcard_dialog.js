@@ -1,15 +1,17 @@
 /* -*- Mode: js; js-indent-level: 2; indent-tabs-mode: nil -*- */
 /* vim: set shiftwidth=2 tabstop=2 autoindent cindent expandtab: */
+/* global Settings, getIccByIndex */
 
 'use strict';
 
 function SimPinDialog(dialog) {
-  if (!IccHelper) {
+  var icc;
+  var _localize = navigator.mozL10n.setAttributes;
+  var translate = navigator.mozL10n.get;
+
+  if (!window.navigator.mozMobileConnections) {
     return;
   }
-
-  var _localize = navigator.mozL10n.localize;
-
 
   /**
    * Global variables and callbacks -- set by the main `show()' method
@@ -20,12 +22,18 @@ function SimPinDialog(dialog) {
   var _onsuccess = function() {};
   var _oncancel = function() {};
 
+  var _allowedRetryCounts = {
+    'pin': 3,
+    'pin2': 3,
+    'puk': 10,
+    'puk2': 10
+  };
 
   /**
    * User Interface constants
    */
 
-  var dialogTitle = dialog.querySelector('header h1');
+  var dialogTitle = dialog.querySelector('gaia-header h1');
   var dialogDone = dialog.querySelector('button[type="submit"]');
   var dialogClose = dialog.querySelector('button[type="reset"]');
   dialogDone.onclick = verify;
@@ -53,6 +61,7 @@ function SimPinDialog(dialog) {
     });
     return input;
   }
+
   var pinInput = numberPasswordInput(pinArea);
   var pukInput = numberPasswordInput(pukArea);
   var newPinInput = numberPasswordInput(newPinArea);
@@ -67,7 +76,7 @@ function SimPinDialog(dialog) {
       errorMsg.hidden = true;
       return;
     }
-    _localize(errorMsgHeader, headerL10nId);
+    errorMsgHeader.setAttribute('data-l10n-id', headerL10nId);
     _localize(errorMsgBody, bodyL10nId, args);
     errorMsg.hidden = false;
   }
@@ -93,14 +102,15 @@ function SimPinDialog(dialog) {
 
     // after three strikes, ask for PUK/PUK2
     var count = event.retryCount;
-    if (count == 0) {
+    if (count <= 0) {
       if (type === 'pin') {
-        _action = initUI('unlock_puk');
-        pukInput.focus();
-      } else if (type === 'fdn') {
+        // we leave this for system app
+        skip();
+      } else if (type === 'fdn' || type === 'pin2') {
         _action = initUI('unlock_puk2');
         pukInput.focus();
       } else { // out of PUK/PUK2: we're doomed
+        // TODO: Shouldn't we show some kind of message here?
         skip();
       }
       return;
@@ -149,7 +159,7 @@ function SimPinDialog(dialog) {
   }
 
   function unlockCardLock(options) {
-    var req = IccHelper.unlockCardLock(options);
+    var req = icc.unlockCardLock(options);
     req.onsuccess = function sp_unlockSuccess() {
       close();
       _onsuccess();
@@ -201,7 +211,7 @@ function SimPinDialog(dialog) {
   }
 
   function setCardLock(options) {
-    var req = IccHelper.setCardLock(options);
+    var req = icc.setCardLock(options);
     req.onsuccess = function spl_enableSuccess() {
       close();
       _onsuccess();
@@ -218,8 +228,19 @@ function SimPinDialog(dialog) {
 
   var _fdnContactInfo = {};
 
+  /**
+   * Updates a FDN contact. For some reason, `icc.updateContact` requires the
+   * pin input value instead of delegating to `icc.setCardLock`. That means
+   * that, in case of failure, the error is different that the one that
+   * `icc.setCardLock` gives. This means that we have to handle it separatedly
+   * instead of being able to use the existing `handleCardLockError` above.
+   * Among other things, it doesn't include the retryCount, so we can't tell
+   * the user how many remaining tries she has. What a mess.
+   *
+   * This should be solved when bug 1070941 is fixed.
+   */
   function updateFdnContact() {
-    var req = IccHelper.updateContact('fdn', _fdnContactInfo, pinInput.value);
+    var req = icc.updateContact('fdn', _fdnContactInfo, pinInput.value);
 
     req.onsuccess = function onsuccess() {
       _onsuccess(_fdnContactInfo);
@@ -227,16 +248,28 @@ function SimPinDialog(dialog) {
     };
 
     req.onerror = function onerror(e) {
-      var wrongPin2 = /IncorrectPassword/.test(req.error.name);
-      if (wrongPin2) { // TODO: count retries (not supported by the platform)
-        _action = initUI('get_pin2');
-        showMessage('fdnErrorMsg');
-        pinInput.value = '';
-        pinInput.focus();
-      } else {
-        _oncancel(_fdnContactInfo);
-        close();
-        throw new Error('Could not edit FDN contact on SIM card', e);
+      switch (req.error.name) {
+        case 'IncorrectPassword':
+        case 'SimPin2':
+          // TODO: count retries (not supported by the platform) -> Bug 1070941
+          _action = initUI('get_pin2');
+          showMessage('fdnErrorMsg');
+          pinInput.value = '';
+          pinInput.focus();
+          break;
+        case 'SimPuk2':
+          _action = initUI('unlock_puk2');
+          pukInput.focus();
+          break;
+        case 'NoFreeRecordFound':
+          alert(translate('fdnNoFDNFreeRecord'));
+          _oncancel(_fdnContactInfo);
+          close();
+          break;
+        default:
+          _oncancel(_fdnContactInfo);
+          close();
+          throw new Error('Could not edit FDN contact on SIM card', e);
       }
     };
   }
@@ -324,6 +357,7 @@ function SimPinDialog(dialog) {
 
   function initUI(action) {
     showMessage();
+    showRetryCount(); // Clear the retry count at first
     dialogDone.disabled = true;
 
     var lockType = 'pin'; // used to query the number of retries left
@@ -391,11 +425,26 @@ function SimPinDialog(dialog) {
     // display the number of remaining retries if necessary
     // XXX this only works with the emulator (and some commercial RIL stacks...)
     // https://bugzilla.mozilla.org/show_bug.cgi?id=905173
-    IccHelper.getCardLockRetryCount(lockType, showRetryCount);
+    var req = icc.getCardLockRetryCount(lockType);
+    req.onsuccess = function() {
+      var retryCount = req.result.retryCount;
+      if (retryCount === _allowedRetryCounts[lockType]) {
+        // hide the retry count if users had not input incorrect codes
+        retryCount = null;
+      }
+      showRetryCount(retryCount);
+    };
     return action;
   }
 
   function show(action, options) {
+    options = options || {};
+
+    icc = getIccByIndex(options.cardIndex);
+    if (!icc) {
+      return;
+    }
+
     var dialogPanel = '#' + dialog.id;
     if (dialogPanel == Settings.currentPanel) {
       return;
@@ -407,7 +456,6 @@ function SimPinDialog(dialog) {
       return;
     }
 
-    options = options || {};
     _origin = options.exitPanel || Settings.currentPanel;
     Settings.currentPanel = dialogPanel;
 

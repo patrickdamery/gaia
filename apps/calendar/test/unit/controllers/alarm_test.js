@@ -1,7 +1,10 @@
+/*global Factory */
+
 requireApp('calendar/shared/js/notification_helper.js');
 requireLib('notification.js');
 
 suiteGroup('Controllers.Alarm', function() {
+  'use strict';
 
   function mockRequestWakeLock(handler) {
     var realApi;
@@ -45,7 +48,6 @@ suiteGroup('Controllers.Alarm', function() {
   var settingStore;
 
   setup(function(done) {
-    this.timeout(10000);
     app = testSupport.calendar.app();
     db = app.db;
     subject = new Calendar.Controllers.Alarm(app);
@@ -70,7 +72,6 @@ suiteGroup('Controllers.Alarm', function() {
   teardown(function(done) {
     subject.unobserve();
 
-    var defaults = settingStore.defaults;
     var trans = db.transaction('settings', 'readwrite');
 
     settingStore.remove('syncFrequency', trans);
@@ -111,12 +112,13 @@ suiteGroup('Controllers.Alarm', function() {
 
       var mockAlarms = navigator.mozAlarms = {
         add: function(endTime, _, data) {
-          if (data && data.type === 'sync')
+          if (data && data.type === 'sync') {
             currentAlarmTime = endTime;
+          }
 
           if (mockAlarms.onadd) {
             Calendar.nextTick(function() {
-              mockAlarms.onadd();
+              mockAlarms.onadd && mockAlarms.onadd();
             });
           }
 
@@ -183,8 +185,7 @@ suiteGroup('Controllers.Alarm', function() {
 
     suite('#_sendAlarmNotification', function() {
       var realApi;
-      var sent = [];
-      var onsend;
+      var sent;
       var MockNotifications = {
         send: function() {
           var args = Array.slice(arguments);
@@ -196,6 +197,10 @@ suiteGroup('Controllers.Alarm', function() {
         }
       };
 
+      setup(function() {
+        sent = [];
+      });
+
       suiteSetup(function() {
         realApi = Calendar.Notification;
         Calendar.Notification = MockNotifications;
@@ -206,8 +211,16 @@ suiteGroup('Controllers.Alarm', function() {
       });
 
       test('issues notification', function(done) {
-        var event = Factory('event');
-        var busytime = Factory('busytime', { _id: '1' });
+        var event = Factory('event', {
+          remote: {
+            title: 'Lorem Ipsum'
+          }
+        });
+        var busytime = Factory('busytime', {
+          _id: '1',
+          // 2 hours in the future to catch edge case (Bug 987427)
+          startDate: new Date(Date.now() + 2 * 60 * 60 * 1000)
+        });
         var url = subject.displayURL + busytime._id;
 
         subject._sendAlarmNotification(
@@ -218,7 +231,9 @@ suiteGroup('Controllers.Alarm', function() {
             done(function() {
               var notification = sent[0];
               assert.ok(notification, 'sends notification');
-              assert.ok(notification[0], 'has title');
+              assert.equal(
+                notification[0], 'Lorem Ipsum starting in 2 hours'
+              );
               assert.equal(
                 notification[1], event.remote.description, 'description'
               );
@@ -324,7 +339,7 @@ suiteGroup('Controllers.Alarm', function() {
           subject.handleAlarm(alarm, function() {
             Calendar.nextTick(function() {
               done(function() {
-                assert.length(sent, 0);
+                assert.lengthOf(sent, 0);
                 assert.ok(lock.mIsUnlocked, 'frees lock');
                 assert.ok(worksQueue, 'works alarm queue');
               });
@@ -504,7 +519,6 @@ suiteGroup('Controllers.Alarm', function() {
 
       suite('type: sync', function() {
         var locks = [];
-        var realLockApi;
 
         mockRequestWakeLock(function(lock) {
           if (lock.type === 'wifi') {
@@ -559,7 +573,7 @@ suiteGroup('Controllers.Alarm', function() {
           var pending = 4;
 
           function onComplete() {
-            assert.length(locks, 4, 'has correct number of locks');
+            assert.lengthOf(locks, 4, 'has correct number of locks');
 
             var freedAll = locks.every(function(lock) {
               return lock.mIsUnlocked === true;
@@ -577,14 +591,16 @@ suiteGroup('Controllers.Alarm', function() {
               callback();
               assert.isTrue(lock.mIsUnlocked, 'unlocks itself');
 
-              if (!(--pending))
+              if (!(--pending)) {
                 done(onComplete);
+              }
             });
           };
 
           var i = 0;
-          while (i++ < pending)
+          while (i++ < pending) {
             subject.handleAlarmMessage({ data: { type: 'sync' } });
+          }
 
         });
 

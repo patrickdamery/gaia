@@ -1,145 +1,407 @@
 
+/**
+ * Controls
+ *
+ * The main camera control bar.
+ *
+ * 1. Must be stacked above viewfinder view
+ */
+
 .controls {
+  display: flex;
   position: absolute;
-  bottom: 0;
-  right: 0;
+  bottom: 0; left: 0;
+  z-index: 1; /* 1 */
+  width: 100%;
+  padding-bottom: 1rem;
+  overflow: hidden;
+  direction: ltr;
+}
+
+/**
+ * disabled
+ */
+
+.controls.disabled {
+  pointer-events: none;
+}
+
+/** Left and Right
+ ---------------------------------------------------------*/
+
+.controls-left,
+.controls-right {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  -moz-user-select: none;
+  transition: opacity 100ms;
+}
+
+/** Left
+ ---------------------------------------------------------*/
+
+.controls-left {
+  justify-content: flex-end;
+  opacity: 1;
+  transition: opacity 200ms ease-in-out;
+}
+
+/**
+ * recording=true
+ */
+
+.controls.recording .controls-left {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/** Right
+ ---------------------------------------------------------*/
+
+.controls-right {
+  justify-content: flex-start;
+}
+
+/**
+ * Timer
+ */
+
+.controls[data-timer="active"] {
+  pointer-events: none;
+}
+
+.controls[data-timer="active"] .controls-left,
+.controls[data-timer="active"] .controls-right {
+  opacity: 0;
+  transition-duration: 300ms;
+}
+
+/** Controls Button
+ ---------------------------------------------------------*/
+
+.controls-button {
+  position: relative;
+  display: block;
+  height: 5.4rem;
+  width: 5.4rem;
+  font-size: 3rem;
+  line-height: 5.4rem;
+  text-align: center;
+  border-radius: 50%;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-color: rgba(0,0,0,0.4);
+  background-clip: padding-box;
+  border: solid 1.8rem transparent;
+  box-sizing: content-box;
+  color: #fff;
+}
+
+/**
+ * :active
+ */
+
+.controls-button:active {
+  background-color: #00b9df;
+}
+
+/** Thumbnail Button
+ ---------------------------------------------------------*/
+
+.controls-thumbnail-button {
+  display: none;
+}
+
+.controls.thumbnail .controls-thumbnail-button {
+  display: block;
+}
+
+.controls-thumbnail-button > img:active {
+  border-color:#008EAB;
+  background-color:#008EAB;
+}
+
+.controls-thumbnail-button > img {
+  position: absolute;
+  top: 0;
   left: 0;
-  height: 4.5rem;
-  z-index: 50;
-  background-color: rgba(0, 0, 0, 0.8);
+  height: 100%;
+  width: 100%;
+  border: solid 2px #ffffff;
+  border-radius: 50%;
+  animation: thumbnail-fade-in 300ms;
+}
+
+/** Thumbnail Animation
+ ---------------------------------------------------------*/
+
+@keyframes thumbnail-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/** Cancel Pick Button
+ ---------------------------------------------------------*/
+
+.controls-cancel-pick-button {
+  display: none;
+}
+
+/**
+ * @cancel
+ */
+
+.controls.cancel .controls-cancel-pick-button {
+  display: block;
+}
+
+/** Mode Switch
+ ---------------------------------------------------------*/
+
+.mode-switch {
+  position: relative;
+  display: block;
+  font-size: 2.4rem;
+  width: 7.6rem;
+  background: rgba(0,0,0,0.4);
+  border-radius: 3rem;
+  padding: 0.2rem;
+  margin-left: 1.8rem;
+  box-sizing: content-box;
   overflow: hidden;
 }
 
-.switch-button,
-.capture-button,
-.misc-button {
-  position: absolute;
-}
+/**
+ * switch-disabled,
+ * recording
+ */
 
-.cancel-pick[disabled=disabled],
-.capture-button[disabled=disabled],
-.switch-button[disabled=disabled] {
-  opacity: 0.5;
+.controls.switch-disabled .mode-switch,
+.controls.recording .mode-switch {
   pointer-events: none;
+  opacity: 0;
 }
 
-.switch-button,
-.misc-button {
-  height: 4.5rem;
-  width: 33%;
-}
+/** Mode Icon
+ ---------------------------------------------------------*/
 
-.switch-button span,
-.capture-button span,
-.gallery-button span,
-.cancel-pick span {
-  -moz-transition: -moz-transform 0.2s ease-in-out;
-  pointer-events: none;
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-size: 3rem;
-  display: block;
+.mode-switch_bg-icon {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  margin-left: -1.5rem;
-  margin-top: -1.5rem;
-  width: 3rem;
-  height: 3rem;
-}
-
-.switch-button {
-  left: 66%;
-}
-
-.misc-button {
+  top: 0;
+  width: 4rem;
   text-align: center;
+  color: #C7C7C7;
+}
+
+.mode-switch_bg-icon:before {
+  font-size: 2.1rem;
+  line-height: 4rem;
+}
+
+/**
+ * first
+ */
+
+.mode-switch_bg-icon:nth-of-type(1) {
   left: 0;
 }
 
-.video-timer {
-  position:relative;
-  top:50%;
-  margin-top:-0.5em;
+/**
+ * second
+ */
+
+.mode-switch_bg-icon:nth-of-type(2) {
+  right: 0;
 }
 
-.gallery-button {
-  display: block;
+/** Mode Switch Handle
+ ---------------------------------------------------------*/
+
+.mode-switch_handle {
+  position: relative;
+  width: 3.6rem;
+  height: 3.6rem;
+  border-radius: 50%;
+  background: #EEE;
+}
+
+/**
+ * Expanded touch-area
+ */
+
+.mode-switch_handle:after {
+  content: '';
+  position: absolute;
+  top: -10px; bottom: -10px;
+  left: -10px; right: -10px;
+}
+
+/** Mode Switch Current Icon
+ ---------------------------------------------------------*/
+
+.mode-switch_current-icon {
+  position: absolute;
   width: 100%;
   height: 100%;
+  opacity: 0;
+  line-height: 3.6rem;
+  text-align: center;
 }
 
-.gallery-button.hidden {
-  display:none;
+.mode-switch_current-icon:before {
+  font-size: 2.1rem;
 }
 
-.gallery-button span {
-  background-image: url(images/grid.png);
+/** Mode Switch Current Icon (camera)
+ ---------------------------------------------------------*/
+
+.mode-switch_current-icon.camera {
+  color: #00CAF2;
 }
 
-.gallery-button[disabled=disabled] {
-  display: none;
+/** Mode Switch Current Icon (video)
+ ---------------------------------------------------------*/
+
+.mode-switch_current-icon.video {
+  color: #D92E2E;
 }
 
-.cancel-pick {
-  display:block;
-  width: 100%;
-  height: 100%;
-}
-
-.cancel-pick.hidden {
-  display:none
-}
-
-.cancel-pick span {
-  background-image: url(images/actionicon_cancel.png);
-}
+/** Capture Button
+ ---------------------------------------------------------*/
 
 .capture-button {
-  background-color: #03a2b4;
-  border-radius: 10rem;
-  left: 33%;
-  height: 10rem;
-  width: 33%;
-  top: -2.8rem;
+  position: relative;
+  top: calc(50% - 5.1rem);
+  width: 10.2rem;
+  height: 10.2rem;
+  -moz-user-select: none;
 }
 
-.video-timer {
-  display: none;
+/** Circle
+ ---------------------------------------------------------*/
+
+.capture-button .circle {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+/** Outer Circle
+ ---------------------------------------------------------*/
+
+.outer-circle {
+  background: #C3F5FF;
+  opacity: 0.35;
+}
+
+/**
+ * .mode-video
+ */
+
+.controls.mode-video .outer-circle {
+  background: #D92E2E;
+}
+
+/** Inner Circle
+ ---------------------------------------------------------*/
+
+.capture-button .inner-circle {
+  background-color: white;
+  transform: scale(0.76);
+  transition: transform 150ms ease-in;
+}
+
+/**
+ * :active,
+ * recording=true,
+ * capture-active=true & mode=picture
+ */
+
+.capture-button:active .inner-circle,
+.recording .capture-button .inner-circle,
+.capture-active .capture-button .inner-circle {
+  background-color: #00caf2;
   color: white;
-  font-size: 1.8rem;
+  transform: scale(1.0);
 }
 
-/* Specific to when we are capturing video */
-.capturing .video-timer {
+/**
+ * mode=video
+ */
+
+.controls.mode-video .inner-circle {
+  position: relative;
+}
+
+/**
+ * mode=video & :active,
+ * mode=video & capture-active=true,
+ * mode=vide & recording=true
+ */
+
+.controls.mode-video .capture-button:active .inner-circle,
+.controls.mode-video.capture-active .capture-button .inner-circle,
+.controls.mode-video.recording .capture-button .inner-circle {
+  background-color: #D92E2E;
+}
+
+/** Icon
+ ---------------------------------------------------------*/
+
+.capture-button .center:before {
   display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  font-size: 4rem;
+  line-height: 10.2rem;
+  text-align: center;
+  color: #81ACB6;
 }
 
-.capturing .gallery-button {
-  display: none;
+/**
+ * :active,
+ * recording,
+ * capture-active && mode-picture
+ */
+
+.capture-button:active .center:before,
+.recording .capture-button .center:before,
+.capture-active .capture-button .center:before {
+  color: white;
 }
 
-.capturing .capture-button {
-  background-color: #d3361c;
+/**
+ * mode-video
+ *
+ * 1. (bug 1008488): Pixel rounding issues sometimes
+ *    means that this circle looks 'chopped'. Using a
+ *    more precise height fixes this, although
+ *    technically this is a platform issue.
+ */
+
+.controls.mode-video .capture-button .center:before {
+  content: "";
+  top: calc(50% - 1rem);
+  left: calc(50% - 1rem);
+  width: 2.001rem; /* 1 */
+  height: 2.001rem; /* 1 */
+  border-radius: 50%;
+  background-color: #D92E2E;
+  color: white;
 }
 
-.video.capturing .capture-button span {
-  background-image: url(images/stop.png);
-}
+/**
+ * mode-video & :active,
+ * mode-video & recording,
+ * mode-video & capture-active
+ */
 
-/* Swap the camera and video icons depending on mode */
-.video .switch-button span {
-  background-image: url(images/camera.png);
-}
-
-.camera .switch-button span {
-  background-image: url(images/video.png);
-}
-
-.camera .capture-button span {
-  background-image: url(images/camera.png);
-}
-
-.video .capture-button span {
-  background-image: url(images/video.png);
+.controls.mode-video .capture-button:active .center:before,
+.controls.mode-video.recording .capture-button .center:before,
+.controls.mode-video.capture-active .capture-button .center:before {
+  border-radius: 3px;
+  background-color: white;
 }

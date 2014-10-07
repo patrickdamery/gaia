@@ -1,6 +1,10 @@
+requireLib('template.js');
+requireLib('templates/date_span.js');
 requireLib('timespan.js');
 
 suiteGroup('Views.MonthsDay', function() {
+  'use strict';
+
   var subject,
       app,
       controller,
@@ -113,9 +117,5 @@ suiteGroup('Views.MonthsDay', function() {
     assert.include(html, date.toLocaleFormat('%A'));
   });
 */
-
-  test('#onfirstseen', function() {
-    assert.equal(subject.onfirstseen, subject.render);
-  });
 
 });

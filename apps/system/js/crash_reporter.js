@@ -58,9 +58,9 @@ var CrashReporter = (function() {
     var crashInfoLink = document.getElementById('crash-info-link');
     crashInfoLink.addEventListener('click', function onLearnMoreClick() {
       var dialog = document.getElementById('crash-dialog');
-      document.getElementById('crash-reports-close').
-               addEventListener('click', function onDoneClick() {
-        this.removeEventListener('click', onDoneClick);
+      document.getElementById('crash-reports-header').
+               addEventListener('action', function onAction() {
+        this.removeEventListener('click', onAction);
         dialog.classList.remove('learn-more');
       });
       dialog.classList.add('learn-more');
@@ -93,7 +93,8 @@ var CrashReporter = (function() {
       };
     }
 
-    SystemBanner.show(message, button);
+    var systemBanner = new SystemBanner();
+    systemBanner.show(message, button);
   }
 
   function deleteCrash(crashID) {
@@ -144,6 +145,19 @@ var CrashReporter = (function() {
       handleCrash(e.detail.crashID, e.detail.chrome);
     }
   });
+
+  function handleAppCrash(e) {
+    var app = e.detail;
+    // Only show crash reporter when the crashed app is active.
+    if (app.isActive()) {
+      setAppName(app.name);
+    }
+  }
+
+  window.addEventListener('appcrashed', handleAppCrash);
+  window.addEventListener('activitycrashed', handleAppCrash);
+  window.addEventListener('homescreencrashed', handleAppCrash);
+  window.addEventListener('searchcrashed', handleAppCrash);
 
   return {
     setAppName: setAppName

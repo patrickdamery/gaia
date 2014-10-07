@@ -1,12 +1,21 @@
 'use strict';
+/* global MocksHelper */
+/* global MockHomescreenLauncher */
+/* global MockStackManager */
+/* global SheetsTransition */
 
 requireApp('system/js/sheets_transition.js');
 
 requireApp('system/test/unit/mock_stack_manager.js');
-requireApp('system/test/unit/mock_window_manager.js');
+requireApp('system/test/unit/mock_app_window_manager.js');
+requireApp('system/test/unit/mock_homescreen_launcher.js');
+requireApp('system/shared/test/unit/mocks/mock_settings_listener.js');
 
 var mocksForSheetsTransition = new MocksHelper([
-  'StackManager'
+  'StackManager',
+  'AppWindowManager',
+  'HomescreenLauncher',
+  'SettingsListener'
 ]).init();
 
 suite('system/SheetsTransition >', function() {
@@ -30,24 +39,40 @@ suite('system/SheetsTransition >', function() {
   var getPrevStub, getNextStub;
 
   setup(function() {
+    window.homescreenLauncher = new MockHomescreenLauncher();
+    window.homescreenLauncher.start();
     getPrevStub = this.sinon.stub(MockStackManager, 'getPrev');
     getPrevStub.returns(dialer);
     dialerFrame = document.createElement('div');
-    dialer.frame = dialerFrame;
+    dialer.element = dialerFrame;
 
     this.sinon.stub(MockStackManager, 'getCurrent').returns(settings);
     settingsFrame = document.createElement('div');
-    settings.frame = settingsFrame;
+    settings.element = settingsFrame;
 
     getNextStub = this.sinon.stub(MockStackManager, 'getNext');
     getNextStub.returns(contacts);
     contactsFrame = document.createElement('div');
-    contacts.frame = contactsFrame;
+    contacts.element = contactsFrame;
+  });
+
+  teardown(function() {
+    window.homescreenLauncher = undefined;
   });
 
   suite('Begining the transition', function() {
     setup(function() {
       SheetsTransition.begin('ltr');
+    });
+
+    test('it should cleanup previous sheet transitions', function() {
+      SheetsTransition.moveInDirection('ltr', 0.3);
+
+      MockStackManager.getCurrent.returns(contacts);
+      SheetsTransition.begin('ltr');
+
+      assert.isFalse(settingsFrame.classList.contains('inside-edges'));
+      assert.equal(settingsFrame.style.transform, '');
     });
 
     test('it should add the inside-edges class to the current sheet',
@@ -57,7 +82,8 @@ suite('system/SheetsTransition >', function() {
 
     test('it should set the transition property on the current sheet',
     function() {
-      assert.equal(settingsFrame.style.transition, 'transform 0s ease 0s');
+      var transition = 'transform 0ms linear 0s';
+      assert.equal(settingsFrame.style.transition, transition);
     });
 
     test('it should add the outside-edges-left class to the new sheet',
@@ -67,7 +93,12 @@ suite('system/SheetsTransition >', function() {
 
     test('it should set the transition property on the new sheet',
     function() {
-      assert.equal(dialerFrame.style.transition, 'transform 0s ease 0s');
+      var transition = 'transform 0ms linear 0s';
+      assert.equal(dialerFrame.style.transition, transition);
+    });
+
+    test('it should set the transitioning flag', function() {
+      assert.isTrue(SheetsTransition.transitioning);
     });
 
     test('it should not fail when we\'re at the beginning of the stack',
@@ -89,12 +120,8 @@ suite('system/SheetsTransition >', function() {
 
       test('it should set the transition property on the new sheet',
       function() {
-        assert.equal(contactsFrame.style.transition, 'transform 0s ease 0s');
-      });
-
-      test('it should bump the zIndex of the new sheet',
-      function() {
-        assert.equal(contactsFrame.dataset.zIndexLevel, 'top-app');
+        var transition = 'transform 0ms linear 0s';
+        assert.equal(contactsFrame.style.transition, transition);
       });
 
       test('it should not fail when we\'re at the end of the stack',
@@ -104,6 +131,17 @@ suite('system/SheetsTransition >', function() {
         assert.isTrue(true, 'did not fail');
       });
     });
+  });
+
+  test('it should dispatch a sheets-gesture-begin event', function(done) {
+    window.addEventListener('sheets-gesture-begin', function gotIt(evt) {
+      window.removeEventListener('sheets-gesture-begin', gotIt);
+
+      assert.isTrue(true, 'got it');
+      done();
+    });
+
+    SheetsTransition.begin('ltr');
   });
 
   suite('Moving the sheets', function() {
@@ -119,7 +157,8 @@ suite('system/SheetsTransition >', function() {
 
     test('it should set the transform property on the new sheet',
     function() {
-      assert.equal(dialerFrame.style.transform, 'translateX(-14%)');
+      assert.equal(dialerFrame.style.transform,
+                   'translateX(calc(-70% - 2rem))');
     });
 
     suite('if the direction is rtl', function() {
@@ -130,12 +169,13 @@ suite('system/SheetsTransition >', function() {
 
       test('it should set the transform property on the current sheet',
       function() {
-        assert.equal(settingsFrame.style.transform, 'translateX(-6%)');
+        assert.equal(settingsFrame.style.transform, 'translateX(-30%)');
       });
 
       test('it should set the transform property on the new sheet',
       function() {
-        assert.equal(contactsFrame.style.transform, 'translateX(70%)');
+        assert.equal(contactsFrame.style.transform,
+                     'translateX(calc(70% + 2rem))');
       });
     });
 
@@ -170,8 +210,9 @@ suite('system/SheetsTransition >', function() {
     });
 
     test('it should set the transition duration on the sheets', function() {
-      assert.equal(settingsFrame.style.transition, 'transform 105ms linear 0s');
-      assert.equal(dialerFrame.style.transition, 'transform 105ms linear 0s');
+      var transition = 'transform 105ms linear 0s';
+      assert.equal(settingsFrame.style.transition, transition);
+      assert.equal(dialerFrame.style.transition, transition);
     });
 
     suite('if the sheet barely moved', function() {
@@ -182,9 +223,9 @@ suite('system/SheetsTransition >', function() {
       });
 
       test('it should have a minimum duration', function() {
-        assert.equal(settingsFrame.style.transition,
-                     'transform 90ms linear 0s');
-        assert.equal(dialerFrame.style.transition, 'transform 90ms linear 0s');
+        var transition = 'transform 90ms linear 0s';
+        assert.equal(settingsFrame.style.transition, transition);
+        assert.equal(dialerFrame.style.transition, transition);
       });
     });
   });
@@ -197,8 +238,9 @@ suite('system/SheetsTransition >', function() {
     });
 
     test('it should set the transition duration on the sheets', function() {
-      assert.equal(settingsFrame.style.transition, 'transform 50ms linear 0s');
-      assert.equal(dialerFrame.style.transition, 'transform 50ms linear 0s');
+      var transition = 'transform 50ms linear 0s';
+      assert.equal(settingsFrame.style.transition, transition);
+      assert.equal(dialerFrame.style.transition, transition);
     });
 
     test('it should remove the initial css classes on the sheets', function() {
@@ -217,8 +259,9 @@ suite('system/SheetsTransition >', function() {
       SheetsTransition.moveInDirection('ltr', 0.7);
       SheetsTransition.snapBack(0.0001);
 
-      assert.equal(settingsFrame.style.transition, 'transform 90ms linear 0s');
-      assert.equal(dialerFrame.style.transition, 'transform 90ms linear 0s');
+      var transition = 'transform 90ms linear 0s';
+      assert.equal(settingsFrame.style.transition, transition);
+      assert.equal(dialerFrame.style.transition, transition);
     });
 
     suite('when we\'re at the beginning of the stack', function() {
@@ -250,8 +293,9 @@ suite('system/SheetsTransition >', function() {
     });
 
     test('it should set the transition duration on the sheets', function() {
-      assert.equal(settingsFrame.style.transition, 'transform 50ms linear 0s');
-      assert.equal(contactsFrame.style.transition, 'transform 50ms linear 0s');
+      var transition = 'transform 50ms linear 0s';
+      assert.equal(settingsFrame.style.transition, transition);
+      assert.equal(contactsFrame.style.transition, transition);
     });
 
     test('it should remove the initial css classes on the sheets', function() {
@@ -270,8 +314,9 @@ suite('system/SheetsTransition >', function() {
       SheetsTransition.moveInDirection('rtl', 0.7);
       SheetsTransition.snapBack(0.0001);
 
-      assert.equal(settingsFrame.style.transition, 'transform 90ms linear 0s');
-      assert.equal(contactsFrame.style.transition, 'transform 90ms linear 0s');
+      var transition = 'transform 90ms linear 0s';
+      assert.equal(settingsFrame.style.transition, transition);
+      assert.equal(contactsFrame.style.transition, transition);
     });
 
     suite('when we\'re at the end of the stack', function() {
@@ -296,17 +341,15 @@ suite('system/SheetsTransition >', function() {
   });
 
   suite('Ending the transition', function() {
-    var currentTrSpy, prevTrSpy, callbackSpy;
+    var currentTrSpy, prevTrSpy;
 
     setup(function() {
       currentTrSpy = this.sinon.spy(settingsFrame, 'addEventListener');
       prevTrSpy = this.sinon.spy(dialerFrame, 'addEventListener');
-      callbackSpy = this.sinon.spy();
 
       SheetsTransition.begin('ltr');
       SheetsTransition.moveInDirection('ltr', 0.2);
       SheetsTransition.snapInPlace();
-      SheetsTransition.end(callbackSpy);
     });
 
     test('it should clear the transform property on the current sheet',
@@ -314,17 +357,23 @@ suite('system/SheetsTransition >', function() {
       assert.equal(settingsFrame.style.transform, '');
     });
 
+    test('it should ignore opasity transitionend', function() {
+      assert.isTrue(settingsFrame.classList.contains('inside-edges'));
+      currentTrSpy.yield({propertyName: 'opacity'});
+      assert.isTrue(settingsFrame.classList.contains('inside-edges'));
+    });
+
     test('it should clean the current sheet css classes after the transition',
     function() {
       assert.isTrue(settingsFrame.classList.contains('inside-edges'));
-      currentTrSpy.yield();
+      currentTrSpy.yield({propertyName: 'transform'});
       assert.isFalse(settingsFrame.classList.contains('inside-edges'));
     });
 
     test('it should clear the current transition property after the transition',
     function() {
       assert.ok(settingsFrame.style.transition);
-      currentTrSpy.yield();
+      currentTrSpy.yield({propertyName: 'transform'});
       assert.equal(settingsFrame.style.transition, '');
     });
 
@@ -336,22 +385,15 @@ suite('system/SheetsTransition >', function() {
     test('it should clean the new sheet css classes after the transition',
     function() {
       assert.isTrue(dialerFrame.classList.contains('outside-edges-left'));
-      prevTrSpy.yield();
+      prevTrSpy.yield({propertyName: 'transform'});
       assert.isFalse(dialerFrame.classList.contains('outside-edges-left'));
     });
 
     test('it should clear the new transition property after the transition',
     function() {
       assert.ok(dialerFrame.style.transition);
-      prevTrSpy.yield();
+      prevTrSpy.yield({propertyName: 'transform'});
       assert.equal(dialerFrame.style.transition, '');
-    });
-
-    test('it should trigger the callback once after the transition',
-    function() {
-      prevTrSpy.yield();
-      currentTrSpy.yield();
-      assert.isTrue(callbackSpy.calledOnce);
     });
 
     test('it should not fail when we\'re at the beginning of the stack',
@@ -362,11 +404,15 @@ suite('system/SheetsTransition >', function() {
       assert.isTrue(true, 'did not fail');
     });
 
+    test('it should update the transitioning flag', function() {
+      assert.isFalse(SheetsTransition.transitioning);
+    });
+
     suite('if the sheets didn\'t move', function() {
       setup(function() {
         SheetsTransition.begin('ltr');
         SheetsTransition.snapInPlace();
-        SheetsTransition.end(callbackSpy);
+        SheetsTransition.end();
       });
 
       test('it should cleanup without waiting',
@@ -376,11 +422,6 @@ suite('system/SheetsTransition >', function() {
 
         assert.isFalse(dialerFrame.classList.contains('outside-edges-left'));
         assert.equal(dialerFrame.style.transition, '');
-      });
-
-      test('it should trigger the callback once without waiting',
-      function() {
-        assert.isTrue(callbackSpy.calledOnce);
       });
     });
 
@@ -404,24 +445,16 @@ suite('system/SheetsTransition >', function() {
       test('it should clean the new sheet css classes after the transition',
       function() {
         assert.isTrue(contactsFrame.classList.contains('outside-edges-right'));
-        nextTrSpy.yield();
+        nextTrSpy.yield({propertyName: 'transform'});
         assert.isFalse(contactsFrame.classList.contains('outside-edges-right'));
       });
 
       test('it should clear the new transition property after the transition',
       function() {
         assert.ok(contactsFrame.style.transition);
-        nextTrSpy.yield();
+        nextTrSpy.yield({propertyName: 'transform'});
         assert.equal(contactsFrame.style.transition, '');
       });
-
-      test('it should clear the new zIndex property after the transition',
-      function() {
-        assert.ok(contactsFrame.dataset.zIndexLevel);
-        nextTrSpy.yield();
-        assert.isUndefined(contactsFrame.dataset.zIndexLevel);
-      });
-
 
       test('it should not fail when we\'re at the end of the stack',
       function() {

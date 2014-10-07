@@ -1,3 +1,7 @@
+/*global WeakMap */
+
+/* exported Dialog */
+
 (function(exports) {
 'use strict';
 
@@ -43,9 +47,9 @@
 function createLocalizedElement(tagName, param) {
   var element = document.createElement(tagName);
 
-  // if we passed an l10nId, use the l10n `localize' method
+  // if we passed an l10nId, use the l10n `setAttributes' method
   if (param.l10nId) {
-    navigator.mozL10n.localize(element, param.l10nId, param.l10nArgs);
+    navigator.mozL10n.setAttributes(element, param.l10nId, param.l10nArgs);
 
   // if we passed in a HTML Fragment, it is already localized
   } else if (param.value.nodeType) {
@@ -98,14 +102,17 @@ var Dialog = function(params) {
   if (params.options.confirm) {
     var confirmOption = params.options.confirm;
     var confirmButton = createLocalizedElement('button', confirmOption.text);
-    cancelButton.className = 'recommend';
+    confirmButton.className = params.options.confirm.className || 'recommend';
     handlers.set(confirmButton, confirmOption);
+
+    menu.appendChild(cancelButton);
     menu.appendChild(confirmButton);
   } else {
     // If there is only one item, we take the 100% of the space available
     cancelButton.style.width = '100%';
+    menu.appendChild(cancelButton);
   }
-  menu.appendChild(cancelButton);
+
   this.form.addEventListener('submit', function(event) {
     event.preventDefault();
   });

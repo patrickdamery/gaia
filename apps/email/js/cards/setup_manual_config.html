@@ -4,18 +4,12 @@
     <a href="#" class="sup-back-btn">
       <span class="icon icon-back"></span>
     </a>
-    <menu type="toolbar">
-      <button class="sup-manual-next-btn" disabled>
-        <span data-l10n-id="setup-info-next">NexT</span>
-      </button>
-    </menu>
     <h1 class="sup-account-header-label header-label"
         data-l10n-id="setup-manual-config-header">ManuaL SetuP</h1>
   </header>
   <div class="scrollregion-below-header">
     <div class="sup-error-region collapsed">
       <div class="sup-error-message"></div>
-      <div class="sup-error-code"></div>
     </div>
     <header class="collapsed"></header>
     <form class="sup-manual-form">
@@ -26,6 +20,7 @@
                  data-l10n-id="setup-info-name"
                  x-inputmode="verbatim"
                  inputmode="verbatim"
+                 dir="auto"
                  required />
           <button type="reset"></button>
         </p>
@@ -35,7 +30,7 @@
                  required />
           <button type="reset"></button>
         </p>
-        <p>
+        <p class="sup-manual-password-wrapper">
           <input class="sup-info-password" type="password"
                  data-l10n-id="setup-info-password"
                  required />
@@ -69,18 +64,26 @@
         </header>
         <div class="sup-form">
           <p>
-            <input class="sup-manual-composite-username" type="text"
-                   data-l10n-id="setup-manual-username"
-                   x-inputmode="verbatim"
-                   inputmode="verbatim"
-                   data-maybe-required />
-            <button type="reset"></button>
-          </p>
-          <p>
             <input class="sup-manual-composite-hostname" type="text"
                    data-l10n-id="setup-manual-hostname"
                    x-inputmode="verbatim"
                    inputmode="verbatim"
+                   dir="auto"
+                   data-maybe-required />
+            <button type="reset"></button>
+          </p>
+          <p>
+            <input class="sup-manual-composite-username" type="text"
+                   data-l10n-id="setup-manual-username"
+                   x-inputmode="verbatim"
+                   inputmode="verbatim"
+                   dir="auto"
+                   data-maybe-required />
+            <button type="reset"></button>
+          </p>
+          <p>
+            <input class="sup-manual-composite-password" type="password"
+                   data-l10n-id="setup-info-password"
                    data-maybe-required />
             <button type="reset"></button>
           </p>
@@ -97,7 +100,7 @@
           <p>
             <input class="sup-manual-composite-port" type="text"
                    data-l10n-id="setup-manual-port" value="993"
-                   data-maybe-required />
+                   dir="auto" data-maybe-required />
             <button type="reset"></button>
           </p>
         </div>
@@ -107,18 +110,26 @@
         </header>
         <div class="sup-form">
           <p>
-            <input class="sup-manual-smtp-username" type="text"
-                   data-l10n-id="setup-manual-username"
-                   x-inputmode="verbatim"
-                   inputmode="verbatim"
-                   data-maybe-required />
-            <button type="reset"></button>
-          </p>
-          <p>
             <input class="sup-manual-smtp-hostname" type="text"
                    data-l10n-id="setup-manual-hostname"
                    x-inputmode="verbatim"
                    inputmode="verbatim"
+                   dir="auto"
+                   data-maybe-required />
+            <button type="reset"></button>
+          </p>
+          <p>
+            <input class="sup-manual-smtp-username" type="text"
+                   data-l10n-id="setup-manual-username"
+                   x-inputmode="verbatim"
+                   inputmode="verbatim"
+                   dir="auto"
+                   data-maybe-required />
+            <button type="reset"></button>
+          </p>
+          <p>
+            <input class="sup-manual-smtp-password" type="password"
+                   data-l10n-id="setup-info-password"
                    data-maybe-required />
             <button type="reset"></button>
           </p>
@@ -135,7 +146,7 @@
           <p>
             <input class="sup-manual-smtp-port" type="text"
                    data-l10n-id="setup-manual-port" value="465"
-                   data-maybe-required />
+                   dir="auto" data-maybe-required />
             <button type="reset"></button>
           </p>
         </div>
@@ -153,17 +164,25 @@
                    data-l10n-id="setup-manual-hostname"
                    x-inputmode="verbatim"
                    inputmode="verbatim"
+                   dir="auto"
                    data-maybe-required />
             <button type="reset"></button>
           </p>
           <p>
             <input class="sup-manual-activesync-username" type="text"
-                   data-l10n-id="setup-manual-username"
-                   data-maybe-required />
+                   data-l10n-id="setup-manual-activesync-username"
+                   dir="auto" data-maybe-required />
             <button type="reset"></button>
           </p>
         </div>
       </section>
+      <div class="sup-form">
+        <p>
+          <button class="sup-manual-next-btn recommend" disabled>
+            <span data-l10n-id="setup-info-next">NexT</span>
+          </button>
+        </p>
+      </div>
     </form>
   </div>
 </section>

@@ -1,6 +1,9 @@
 'use strict';
+/* global LazyLoader */
+/* exported navigationStack */
 
 function navigationStack(currentView) {
+  /* jshint validthis:true */
   // Each transition entry includes a 'forwards' property including the
   //  classes which will be added to the 'current' and 'next' view when the
   //  transition goes forwards, as well as a 'backwards' property including the
@@ -27,6 +30,12 @@ function navigationStack(currentView) {
         current: 'app-go-up-back-out'
       }
     },
+    'activity-popup': {
+        forwards: {
+         next: 'app-go-up-in'
+      },
+      backwards: {}
+    },
     'go-deeper': {
       forwards: {
         current: 'app-go-deeper-out',
@@ -49,17 +58,21 @@ function navigationStack(currentView) {
     }
   };
 
-  var COMMS_APP_ORIGIN = document.location.protocol + '//' +
-      document.location.host;
+  var COMMS_APP_ORIGIN = location.origin;
   var screenshotViewId = 'view-screenshot';
   var _currentView = currentView;
+  document.getElementById(currentView).classList.add('current');
   this.stack = [];
 
-  this.stack.push({view: _currentView, transition: 'popup', zIndex: 1});
+  navigationStack._zIndex = navigationStack._zIndex || 0;
+
+  this.stack.push({view: _currentView, transition: 'popup',
+                   zIndex: ++navigationStack._zIndex});
 
   var waitForAnimation = function ng_waitForAnimation(view, callback) {
-    if (!callback)
+    if (!callback) {
       return;
+    }
 
     view.addEventListener('animationend', function ng_onAnimationEnd() {
       view.removeEventListener('animationend', ng_onAnimationEnd);
@@ -67,9 +80,14 @@ function navigationStack(currentView) {
     });
   };
 
-  this.go = function go(nextView, transition) {
-    if (_currentView === nextView)
+  this.go = function go(nextView, transition, callback) {
+    if (_currentView === nextView) {
+      if (callback) {
+        callback();
+      }
       return;
+    }
+
     var parent = window.parent;
     if (nextView == 'view-contact-form') {
       parent.postMessage({type: 'hide-navbar'}, COMMS_APP_ORIGIN);
@@ -104,7 +122,6 @@ function navigationStack(currentView) {
     }
 
     var forwardsClasses = this.transitions[transition].forwards;
-    var backwardsClasses = this.transitions[transition].backwards;
 
     // Add forwards class to current view.
     currentClassList.add('block-item');
@@ -123,7 +140,24 @@ function navigationStack(currentView) {
       });
     }
 
-    var zIndex = this.stack[this.stack.length - 1].zIndex + 1;
+    next.classList.add('current');
+    var realCurrentView = document.getElementById(_currentView);
+    var _callbackInner = function _callback() {
+      next.classList.add('current');
+      realCurrentView.classList.remove('current');
+      if (callback) {
+        callback();
+      }
+    };
+
+
+    if (transition === 'none') {
+      setTimeout(_callbackInner, 0);
+    } else {
+      waitForAnimation(next, _callbackInner);
+    }
+
+    var zIndex = ++navigationStack._zIndex;
     this.stack.push({ view: nextView, transition: transition,
                       zIndex: zIndex});
     next.style.zIndex = zIndex;
@@ -131,8 +165,6 @@ function navigationStack(currentView) {
   };
 
   this.back = function back(callback) {
-    var self = this;
-
     if (this.stack.length < 2) {
       if (typeof callback === 'function') {
         setTimeout(callback, 0);
@@ -212,12 +244,24 @@ function navigationStack(currentView) {
       });
     }
 
-    if (!backwardsClasses.current && !backwardsClasses.next && callback) {
-      setTimeout(callback, 0);
+    document.getElementById(nextView.view).classList.add('current');
+    var _callbackInner = function _callbackInner() {
+      document.getElementById(nextView.view).classList.add('current');
+      currentClassList.remove('current');
+      if (callback) {
+        callback();
+      }
+    };
+
+
+    if ((!backwardsClasses.current && !backwardsClasses.next) ||
+        transition === 'none') {
+      setTimeout(_callbackInner, 0);
     } else {
-      waitForAnimation(current, callback);
+      waitForAnimation(current, _callbackInner);
     }
     _currentView = nextView.view;
+    navigationStack._zIndex = nextView.zIndex;
   };
 
   this.home = function home(callback) {

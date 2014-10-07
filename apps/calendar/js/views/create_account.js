@@ -1,4 +1,5 @@
 (function(window) {
+  'use strict';
 
   var template = Calendar.Templates.Account;
 
@@ -19,15 +20,15 @@
     selectors: {
       element: '#create-account-view',
       accounts: '#create-account-presets',
-      cancelButton: '#create-account-view .cancel'
+      header: '#create-account-header'
     },
 
     get accounts() {
       return this._findElement('accounts');
     },
 
-    get cancelButton() {
-      return this._findElement('cancelButton');
+    get header() {
+      return this._findElement('header');
     },
 
     _initEvents: function() {
@@ -43,7 +44,7 @@
       store.on('remove', render);
       store.on('add', render);
 
-      this.cancelButton.addEventListener('click', this.cancel);
+      this.header.addEventListener('action', this.cancel);
     },
 
     render: function() {
@@ -74,14 +75,15 @@
 
         available.forEach(renderPreset);
 
-        if (this.onrender)
+        if (this.onrender) {
           this.onrender();
+        }
 
       }.bind(this));
     },
 
     cancel: function() {
-      window.back();
+      window.history.back();
     }
   };
 

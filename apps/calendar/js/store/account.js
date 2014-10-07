@@ -1,7 +1,16 @@
 (function(window) {
+  'use strict';
 
   function Account() {
     Calendar.Store.Abstract.apply(this, arguments);
+
+    Calendar.Promise.denodeifyAll(this, [
+      'verifyAndPersist',
+      'sync',
+      'markWithError',
+      'syncableAccounts',
+      'availablePresets'
+    ]);
   }
 
   Account.prototype = {
@@ -9,7 +18,7 @@
 
     _store: 'accounts',
 
-    _parseId: Calendar.Store.Abstract.prototype.probablyParseInt,
+    _parseId: Calendar.probablyParseInt,
 
     /**
      * Checks if a given account is a duplicate of another.
@@ -242,8 +251,9 @@
         trans = null;
       }
 
-      if (!account._id)
+      if (!account._id) {
         throw new Error('given account must be persisted');
+      }
 
       if (!account.error) {
         account.error = {
@@ -299,7 +309,9 @@
      */
     syncableAccounts: function(callback) {
       this.all(function(err, list) {
-        if (err) return callback(err);
+        if (err) {
+          return callback(err);
+        }
 
         var results = [];
         for (var key in list) {

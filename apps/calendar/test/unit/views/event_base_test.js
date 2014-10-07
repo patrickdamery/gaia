@@ -1,4 +1,5 @@
 suiteGroup('Views.EventBase', function() {
+  'use strict';
 
   var subject;
   var app;
@@ -23,8 +24,9 @@ suiteGroup('Views.EventBase', function() {
     div.id = 'test';
     div.innerHTML = [
       '<div id="event-test">',
-        '<button class="primary">primary</button>',
-        '<button class="cancel">cancel</button>',
+        '<gaia-header id="event-test-header" action="cancel">',
+          '<button class="primary">primary</button>',
+        '</gaia-header>',
       '</div>'
     ].join('');
 
@@ -35,7 +37,7 @@ suiteGroup('Views.EventBase', function() {
       app: app,
       selectors: {
         element: '#event-test',
-        cancelButton: '#event-test .cancel',
+        header: '#event-test-header',
         primaryButton: '#event-test .primary'
       }
     });
@@ -71,8 +73,8 @@ suiteGroup('Views.EventBase', function() {
     assert.ok(subject.primaryButton);
   });
 
-  test('.cancelButton', function() {
-    assert.ok(subject.cancelButton);
+  test('.header', function() {
+    assert.ok(subject.header);
   });
 
   test('.fieldRoot', function() {
@@ -220,9 +222,6 @@ suiteGroup('Views.EventBase', function() {
     });
 
    suite('update', function() {
-      var busytime;
-      var event;
-
       setup(function(done) {
         subject.ondispatch = done;
         subject.dispatch({
@@ -278,7 +277,7 @@ suiteGroup('Views.EventBase', function() {
     };
     subject.dispatch({params: {}});
 
-    var fetchReturnTop = subject.returnTop();
+    subject.returnTop();
     subject._returnTo = '/bar';
     subject._updateUI = function() {
       assert.equal(subject._returnTo, '/bar');
@@ -289,7 +288,6 @@ suiteGroup('Views.EventBase', function() {
   });
 
   suite('#_createModel', function() {
-    var controller;
     var date = new Date(2012, 0, 1);
 
     test('time is less then now', function() {

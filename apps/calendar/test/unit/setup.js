@@ -1,7 +1,11 @@
+/*global Factory */
+
 (function(window) {
+  'use strict';
+
   var oldRequire = window.require;
 
-  require = function(path) {
+  window.require = function(path) {
     if (path === 'stream') {
       throw new Error('skip');
     }
@@ -9,13 +13,11 @@
   };
 
 
-  if (typeof(testSupport) === 'undefined') {
-    testSupport = {};
+  if (typeof(window.testSupport) === 'undefined') {
+    window.testSupport = {};
   }
 
-  /* testSupport */
-
-  testSupport.calendar = {
+  window.testSupport.calendar = {
     _lastEnvId: 0,
 
     accountEnvironment: function(accOverrides, calOverrides) {
@@ -143,7 +145,7 @@
 
       name.forEach(function(storeName) {
         var store = trans.objectStore(storeName);
-        var res = store.clear();
+        store.clear();
       });
 
       trans.oncomplete = function() {
@@ -231,10 +233,8 @@
     }
   };
 
-
-  /* global exports */
-
   function requireLib() {
+    /*jshint validthis: true */
     var args = Array.prototype.slice.call(arguments);
     args[0] = 'calendar/js/' + args[0];
 
@@ -242,11 +242,39 @@
   }
 
   function requireSupport() {
+    /*jshint validthis: true */
     var args = Array.prototype.slice.call(arguments);
     args[0] = 'calendar/test/unit/support/' + args[0];
 
     return requireApp.apply(this, args);
   }
+
+window.mochaPromise = function(mochaFn, description, callback) {
+  if (typeof description === 'function') {
+    callback = description;
+    description = null;
+  }
+
+  function execute(done) {
+    var promise;
+    try {
+      promise = callback.call();
+    } catch (error) {
+     return done(error);
+    }
+
+    return promise.then(() => {
+      done();
+    })
+    .catch(done);
+  }
+
+  if (description) {
+    mochaFn(description, execute);
+  } else {
+    mochaFn(execute);
+  }
+};
 
   window.testSupport = testSupport;
   window.requireLib = requireLib;
@@ -283,14 +311,20 @@
   function l10nLink(href) {
     var resource = document.createElement('link');
     resource.setAttribute('href', href);
-    resource.setAttribute('rel', 'resource');
-    resource.setAttribute('type', 'application/l10n');
+    resource.setAttribute('rel', 'localization');
     document.head.appendChild(resource);
   }
 
+  function linkManifest(href) {
+    var resource = document.createElement('link');
+    resource.setAttribute('href', href);
+    resource.setAttribute('rel', 'manifest');
+    document.head.appendChild(resource);
+  }
 
-  l10nLink('/locales/locales.ini');
-  l10nLink('/shared/locales/date.ini');
+  l10nLink('/locales/calendar.{locale}.properties');
+  l10nLink('/shared/locales/date/date.{locale}.properties');
+  linkManifest('/manifest.webapp');
 
   requireApp('calendar/shared/js/l10n.js');
   // setup localization....
@@ -299,7 +333,7 @@
     document.dispatchEvent(new Event('DOMContentLoaded'));
 
     suiteSetup(function(done) {
-      var links = Array.slice(document.querySelectorAll('link'));
+      Array.slice(document.querySelectorAll('link'));
 
       var state = navigator.mozL10n.readyState;
       if (state !== 'complete' && state !== 'interactive') {
@@ -316,16 +350,31 @@
   requireApp('calendar/shared/js/lazy_loader.js');
 
   requireLib('calendar.js');
+  requireLib('log.js');
+  requireLib('ns.js');
+  requireLib('binsearch.js');
+  requireLib('compare.js');
+  requireLib('calc.js');
+  requireLib('date_l10n.js');
+  requireLib('extend.js');
+  requireLib('next_tick.js');
+  requireLib('object.js');
+  requireLib('pending_manager.js');
+  requireLib('probably_parse_int.js');
+  requireLib('retry.js');
+  requireLib('timespan.js');
+  requireLib('promise.js');
+  requireLib('performance.js');
   requireLib('error.js');
   requireApp('calendar/test/unit/loader.js');
   requireLib('responder.js');
-  requireLib('calc.js');
   requireLib('load_config.js');
   requireLib('view.js');
   requireLib('router.js');
   requireLib('interval_tree.js');
   requireLib('time_observer.js');
   requireLib('store/abstract.js');
+  requireLib('store/alarm.js');
   requireLib('store/busytime.js');
   requireLib('store/account.js');
   requireLib('store/calendar.js');
@@ -333,6 +382,7 @@
   requireLib('store/setting.js');
   requireLib('store/ical_component.js');
   requireLib('provider/abstract.js');
+  requireLib('provider/local.js');
   requireSupport('mock_provider.js');
   requireLib('worker/manager.js');
   requireLib('controllers/service.js');
@@ -341,8 +391,10 @@
   requireLib('controllers/sync.js');
   requireLib('controllers/alarm.js');
   requireLib('store/setting.js');
-  requireLib('store/alarm.js');
   requireLib('db.js');
+  requireLib('ext/eventemitter2.js');
+  requireLib('utils/mout.js');
+  requireLib('day_observer.js');
   requireLib('app.js');
 
   /* test helpers */

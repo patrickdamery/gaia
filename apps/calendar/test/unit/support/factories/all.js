@@ -1,4 +1,7 @@
+/*global Factory */
+
 (function(window) {
+  'use strict';
 
   var calendarId = 0;
   var Calc = Calendar.Calc;
@@ -23,17 +26,15 @@
       );
     }
 
-    if (!obj.end) {
-      obj.end = Calc.dateToTransport(
-        // 1 hour after now
-        new Date(Date.now() + 3600 * 1000)
-      );
-    }
-
-    // handle case of given .start\end or defaults
-
     if (obj.start) {
       obj.startDate = Calc.dateFromTransport(obj.start);
+    }
+
+    if (!obj.end) {
+      obj.end = Calc.dateToTransport(
+        // 1 hour after start
+        new Date(obj.startDate.getTime() + 3600 * 1000)
+      );
     }
 
     if (obj.end) {
@@ -81,11 +82,13 @@
 
       handleTransportDate(obj);
 
-      if (!obj.title)
+      if (!obj.title) {
         obj.title = 'title ' + id;
+      }
 
-      if (!obj.description)
+      if (!obj.description) {
         obj.description = 'description ' + id;
+      }
 
     }
   });
@@ -170,8 +173,9 @@
     },
 
     oncreate: function(obj) {
-      if (!obj._id)
+      if (!obj._id) {
         obj._id = obj.calendarId + '-' + obj.remote.id;
+      }
     }
   });
 
@@ -190,8 +194,8 @@
 
       handleTransportDate(obj);
 
-      if (obj.endDate == obj.startDate) {
-        obj.endDate.setHours(endDate.getHours() + 2);
+      if (obj.endDate === obj.startDate) {
+        obj.endDate.setHours(obj.endDate.getHours() + 2);
         handleTransportDate(obj);
       }
     }

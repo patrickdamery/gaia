@@ -1,107 +1,153 @@
 'use strict';
 
-require('/tests/js/integration_helper.js');
+var MarionetteHelper = requireGaia('/tests/js-marionette/helper.js');
+var GetAppName = requireGaia('/tests/performance/getappname.js');
+var MemInfo = requireGaia('/tests/performance/meminfo.js');
 
-(function(global) {
+// Function to send results to the reporter that is OOP
+// Basically writing to the mocha-json-proxy
+var sendResults = require('mocha-json-proxy/reporter').write;
 
-  function extend(dest, obj) {
-    for (var key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        dest[key] = obj[key];
-      }
-    }
-  }
+/* opts can have the following keys:
+ * - spawnInterval (optional): defines how many seconds we must wait before
+ *   launching an app. Default is 6000.
+ * - runs (optional): defines how many runs we should do. Default is 5.
+ */
+function PerformanceHelper(opts) {
+  // default values
+  var options = this.opts = {
+    // Time before gecko spawns a new template process
+    // see the pref dom.ipc.processPrelaunch.delayMs in
+    // http://mxr.mozilla.org/mozilla-central/source/b2g/app/b2g.js#577
+    // FIXME it would be very nice to get it automatically via marionette
+    // we add 1s to this value to give a little more time to the background
+    // task to finish the preloading
+    spawnInterval: config.spawnInterval,
+    runs: config.runs
+  };
 
-  /* opts can have the following keys:
-   * - spawnInterval (optional): defines how many seconds we must wait before
-   *   launching an app. Default is 6000.
-   * - runs (optional): defines how many runs we should do. Default is 5.
-   */
-  function PerformanceHelper(opts) {
-    // default values
-    this.opts = {
-      // Time before gecko spawns a new template process
-      // see the pref dom.ipc.processPrelaunch.delayMs in
-      // http://mxr.mozilla.org/mozilla-central/source/b2g/app/b2g.js#577
-      // FIXME it would be very nice to get it automatically via marionette
-      // we add 1s to this value to give a little more time to the background
-      // task to finish the preloading
-      spawnInterval: 6000,
-      runs: window.mozTestInfo.runs
-    };
-
-    // overwrite values from the user
-    extend(this.opts, opts);
-
-    if (! this.opts.app) {
-      var errMsg = 'The "app" property must be configured.';
-      throw new Error('PerformanceHelper: ' + errMsg);
-    }
-
-    this.app = this.opts.app;
-    this.runs = this.opts.runs;
-
-    this.results = Object.create(null);
-  }
-
-  extend(PerformanceHelper, {
-    // FIXME encapsulate this in a nice object like PerformanceHelperAtom
-    // https://bugzilla.mozilla.org/show_bug.cgi?id=844032
-    registerLoadTimeListener: function(device) {
-      var registerListener =
-        'var w = global.wrappedJSObject;' +
-        'w.loadTimes = [];' +
-        'if (w.onapplicationloaded) {' +
-        /* We've been here before, let's clean ! */
-        '  w.removeEventListener("apploadtime", w.onapplicationloaded);' +
-        '}' +
-        'w.onapplicationloaded = function(e) {' +
-        '  w.loadTimes.push(e.detail);' +
-        '};' +
-        'w.addEventListener("apploadtime", w.onapplicationloaded);';
-
-      device.executeScript(registerListener);
-    },
-
-    unregisterLoadTimeListener: function(device) {
-      var removeListener =
-        'var w = global.wrappedJSObject;' +
-        'w.removeEventListener("apploadtime", w.onapplicationloaded);';
-
-      device.executeScript(removeListener);
-    },
-
-    getLoadTimes: function(device) {
-      var getResults = 'return global.wrappedJSObject.loadTimes;';
-      return device.executeScript(getResults);
-    },
-
-
-    reportDuration: function(values, title) {
-      title = title || '';
-
-      // this is global because we need to access this in the Reporter
-      if (global.mozPerfDurations === null) {
-        global.mozPerfDurations = Object.create(null);
-      }
-
-      if (title in global.mozPerfDurations) {
-        var errMsg = 'reportDuration was called twice with the same title';
-        throw new Error('PerformanceHelper: ' + errMsg);
-      }
-      global.mozPerfDurations[title] = values;
-    }
+  Object.keys(opts).forEach(function(key) {
+    options[key] = opts[key];
   });
 
-  PerformanceHelper.prototype = {
-    reportRunDurations: function(runResults) {
+  if (! this.opts.app) {
+    var errMsg = 'The "app" property must be configured.';
+    throw new Error('PerformanceHelper: ' + errMsg);
+  }
 
-      var start = runResults.start || 0;
-      delete runResults.start;
+  this.app = this.opts.app;
+  this.runs = this.opts.runs;
+
+  this.results = Object.create(null);
+}
+
+PerformanceHelper.injectHelperAtom = function(client) {
+  client.contentScript.inject(
+    config.gaiaDir + '/tests/performance/performance_helper_atom.js');
+};
+
+// FIXME encapsulate this in a nice object like PerformanceHelperAtom
+// https://bugzilla.mozilla.org/show_bug.cgi?id=844032
+PerformanceHelper.registerLoadTimeListener = function(client) {
+  var registerListener =
+    'var w = global.wrappedJSObject;' +
+    'w.loadTimes = [];' +
+    'if (w.onapplicationloaded) {' +
+    /* We've been here before, let's clean ! */
+    '  w.removeEventListener("apploadtime", w.onapplicationloaded);' +
+    '}' +
+    'w.onapplicationloaded = function(e) {' +
+    '  var data = e.detail;' +
+    /* So that it is backward compatible with the older gaia. */
+    '  data.src = data.src || e.target.src;' +
+    '  w.loadTimes.push(data);' +
+    '};' +
+    'w.addEventListener("apploadtime", w.onapplicationloaded);';
+
+  client.executeScript(registerListener);
+};
+
+PerformanceHelper.unregisterLoadTimeListener = function(client) {
+  var removeListener =
+    'var w = global.wrappedJSObject;' +
+    'w.removeEventListener("apploadtime", w.onapplicationloaded);';
+
+  client.executeScript(removeListener);
+};
+
+PerformanceHelper.registerTimestamp = function(client) {
+  client
+    .executeScript(function registerListener() {
+      window.addEventListener('apploadtime', function loadtimeHandler(e) {
+        window.removeEventListener('apploadtime', loadtimeHandler);
+        window.wrappedJSObject.epochStart = e.detail.timestamp;
+      });
+    });
+};
+
+PerformanceHelper.getEpochStart = function(client) {
+  client.switchToFrame();
+
+  return client
+    .executeScript(function() {
+      return window.wrappedJSObject.epochStart;
+    });
+};
+
+PerformanceHelper.getEpochEnd = function(client) {
+  return client.executeScript(function() {
+    return document.defaultView.wrappedJSObject.epochEnd;
+  });
+};
+
+PerformanceHelper.getLoadTimes = function(client) {
+  var getResults = 'return global.wrappedJSObject.loadTimes;';
+  return client.executeScript(getResults);
+};
+
+PerformanceHelper.getGoalData = function(client) {
+  if (config.goals
+      && client.session && client.session.device) {
+    return config.goals[client.session.device];
+  }
+  return null;
+};
+
+PerformanceHelper.reportDuration = function(values, title) {
+  title = title || '';
+  sendResults('mozPerfDuration', { title: title, values: values });
+};
+
+PerformanceHelper.reportMemory = function(values, title) {
+  title = title || '';
+  var mozPerfMemory = {};
+  mozPerfMemory[title] = values;
+  sendResults('mozPerfMemory', mozPerfMemory);
+};
+
+PerformanceHelper.reportGoal = function(goals) {
+  sendResults('mozPerfGoal', goals);
+};
+
+PerformanceHelper.prototype = {
+    // startValue is the name of the start event.
+    // By default it is 'start'
+    reportRunDurations: function(runResults, startValue, delta) {
+
+      startValue = startValue || 'start';
+      delta = delta || 0;
+
+      var start = runResults[startValue] || 0;
+      delete runResults[startValue];
 
       for (var name in runResults) {
-        this.results[name] = this.results[name] || [];
-        this.results[name].push(runResults[name] - start);
+        var value = runResults[name] - start + delta;
+        // Sometime we start from an event that happen later.
+        // Ignore the one that occur before - ie negative values.
+        if (value >= 0) {
+          this.results[name] = this.results[name] || [];
+          this.results[name].push(value);
+        }
       }
 
     },
@@ -113,16 +159,17 @@ require('/tests/js/integration_helper.js');
     },
 
     /**
-     * Runs a generator as a "task" .runs number
-     * of times with a delay between each task.
+     * Repeat the task 'fn' with a delay.
+     * Call 'callback' if exist.
      *
-     *    yield perf.repeatWithDelay(function(app, next) {
-     *      yield app.launch();
-     *      yield app.close();
+     *    perf.repeatWithDelay(function(app, next) {
+     *      app.launch();
+     *      app.close();
      *    });
      *
      */
-    repeatWithDelay: function(generator, callback) {
+    repeatWithDelay: function(fn, callback) {
+
       callback = callback || this.app.defaultCallback;
 
       var pending = this.runs;
@@ -142,81 +189,75 @@ require('/tests/js/integration_helper.js');
       var self = this;
       function trigger() {
         self.delay(function() {
-          self.task(generator, nextTask);
+          self.task(fn, nextTask);
         });
       }
 
       trigger();
     },
 
-    /**
-     * Almost identical to app.task but generators
-     * do not take a done parameter and will close when
-     * execution completes.
-     *
-     *
-     *    yield perf.task(function(app, next) {
-     *      yield app.something();
-     *    });
-     *
+    /*
+     * Run a task 'fn', and then chain on the 'next' task.
      */
-    task: function(generator, callback) {
+    task: function(fn, next) {
       var app = this.app;
-      callback = (callback || app.defaultCallback);
-      var instance;
+      next = next || app.defaultCallback;
 
-      function singleTaskNext(err, value) {
-        if (err && !(err instanceof StopIteration)) {
-          try {
-            instance.throw(err);
-          } catch (e) {
-            callback(e, null);
-            instance.close();
-          }
-        } else {
-          try {
-            instance.send(value);
-          } catch (e) {
-            if (!(e instanceof StopIteration)) {
-              callback(e);
-            }
-            callback();
-          }
-        }
-      }
-
-      // ugly but awesome hack
-      // this is how we can switch
-      // generators in .task
-      var appInstance = Object.create(app);
-      appInstance.defaultCallback = singleTaskNext;
-      appInstance.device = Object.create(app.device);
-      appInstance.device.defaultCallback = singleTaskNext;
-
-      try {
-        var instance = generator.call(this, appInstance, singleTaskNext);
-        instance.next();
-      } catch (e) {
-        callback(e);
-      }
+      fn(app);
+      next();
     },
 
-    delay: function(callback) {
-      IntegrationHelper.delay(
-        this.app.device,
-        this.opts.spawnInterval,
-        callback
-      );
+    delay: function(givenCallback) {
+      givenCallback = givenCallback || client.defaultCallback;
+      var interval = this.opts.spawnInterval;
+
+      MarionetteHelper.delay(this.app.client, interval, givenCallback);
     },
 
-    observe: function(callback) {
-      if (! this.opts.lastEvent) {
-        var errMsg = 'the "lastEvent" property msut be configured.';
-        throw new Error('PerformanceHelper: ' + errMsg);
+    waitForPerfEvent: function(callback) {
+      this.app.waitForPerfEvents(this.opts.lastEvent, callback);
+    },
+
+    /*
+     * Get the memory stats for the specified app
+     * as well as the main b2g.
+     * See bug 917717.
+     */
+  getMemoryUsage: function(app) {
+    var appName = GetAppName(app);
+    var meminfo = MemInfo.meminfo();
+    var info = null;
+    var system = null;
+    meminfo.some(function(element) {
+      if(element.NAME == appName) {
+        info = element;
+      } else if(element.NAME == 'b2g') {
+        system = element;
       }
-      return this.app.observePerfEvents(this.opts.lastEvent, callback);
+      return info && system;
+    });
+
+    if (!info) {
+      return null;
     }
-  };
 
-  global.PerformanceHelper = PerformanceHelper;
-})(window);
+    return {
+      app: {
+        name: info.NAME,
+        uss: parseFloat(info.USS),
+        pss: parseFloat(info.PSS),
+        rss: parseFloat(info.RSS),
+        vsize: parseFloat(info.VSIZE)
+      },
+      system: {
+        name: system.NAME,
+        uss: parseFloat(system.USS),
+        pss: parseFloat(system.PSS),
+        rss: parseFloat(system.RSS),
+        vsize: parseFloat(system.VSIZE)
+      }
+    };
+  }
+};
+
+module.exports = PerformanceHelper;

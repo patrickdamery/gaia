@@ -1,7 +1,6 @@
 var Gallery = require('./lib/gallery.js'),
     Marionette = require('marionette-client'),
-    assert = require('assert'),
-    TestCommon = require('./lib/test_common');
+    assert = require('assert');
 
 marionette('the gallery', function() {
 
@@ -13,11 +12,21 @@ marionette('the gallery', function() {
       'device.storage.testing': true,
       'device.storage.prompt.testing': true,
       'webgl.force-enabled': true
+    },
+    settings: {
+      'ftu.manifestURL': null,
+      'lockscreen.enabled': false
     }
   });
 
   setup(function() {
-    TestCommon.prepareTestSuite('pictures', client);
+    // Remove all files in temp device storage.
+    client.fileManager.removeAllFiles();
+    // Add file into the pictures directory
+    client.fileManager.add({
+      type: 'pictures',
+      filePath: 'test_media/Pictures/firefoxOS.png'
+    });
     app = new Gallery(client);
     actions = new Marionette.Actions(client);
     app.launch();
@@ -40,7 +49,7 @@ marionette('the gallery', function() {
     assert.ok(app.thumbnailsView.displayed());
   });
 
-  test('should flick through images in fullscreen mode', function() {
+  test.skip('should flick through images in fullscreen mode', function() {
     // Acquire a duplicate of an image by launching the editing
     // mode and saving it.
     app.thumbnail.click();
@@ -56,11 +65,15 @@ marionette('the gallery', function() {
     var translateX = app.getFrameTranslation(app.fullscreenFrame2);
     assert.strictEqual(translateX, 0);
 
-    actions.flick(app.fullscreenFrame2, 0, 0, -300, 0).perform();
+    var size = app.fullscreenView.size();
+    var centerX = size.width / 2;
+    var centerY = size.height / 2;
+
+    actions.flick(app.fullscreenFrame2, centerX + 100,
+                  centerY, centerX - 100, centerY).perform();
 
     //Swiping centers the fullscreen view on the second frame.
     translateX = app.getFrameTranslation(app.fullscreenFrame3);
     assert.strictEqual(translateX, 0);
   });
-
 });

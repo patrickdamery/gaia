@@ -1,4 +1,5 @@
 Calendar.ns('Utils').AccountCreation = (function() {
+  'use strict';
 
   /**
    * Helper class to create accounts.
@@ -18,8 +19,11 @@ Calendar.ns('Utils').AccountCreation = (function() {
    */
   function AccountCreation(app) {
     this.app = app || Calendar.App;
-
     Calendar.Responder.call(this);
+
+    Calendar.Promise.denodeifyAll(this, [
+      'send'
+    ]);
   }
 
   AccountCreation.prototype = {
@@ -83,7 +87,7 @@ Calendar.ns('Utils').AccountCreation = (function() {
           }
 
           // begin sync of calendars
-          var calendars = calendarStore.remotesByAccount(
+          calendarStore.remotesByAccount(
             result._id,
             syncCalendars
           );

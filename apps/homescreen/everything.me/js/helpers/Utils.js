@@ -38,10 +38,6 @@ Evme.Utils = new function Evme_Utils() {
       protocol = document.location.protocol,
       homescreenOrigin = protocol + '//homescreen.' + domain;
 
-  // reduce this from our icons that should be the same as the OS
-  // since OS icons have some transparent padding to them
-  this.OS_ICON_PADDING = 2;
-
   this.PIXEL_RATIO_NAMES = {
     NORMAL: 'normal',
     HIGH: 'high'
@@ -63,9 +59,9 @@ Evme.Utils = new function Evme_Utils() {
   this.EMPTY_APPS_SIGNATURE = '';
 
   this.APPS_FONT_SIZE = 13 * (window.devicePixelRatio || 1);
-  this.APP_NAMES_SHADOW_OFFSET_X = 1;
+  this.APP_NAMES_SHADOW_OFFSET_X = 0;
   this.APP_NAMES_SHADOW_OFFSET_Y = 1;
-  this.APP_NAMES_SHADOW_BLUR = 1;
+  this.APP_NAMES_SHADOW_BLUR = 2;
   this.APP_NAMES_SHADOW_COLOR = 'rgba(0, 0, 0, 1)';
 
   this.PIXEL_RATIO_NAME =
@@ -89,7 +85,9 @@ Evme.Utils = new function Evme_Utils() {
   };
 
   this.logger = function logger(level) {
-    return function Evme_logger() {
+    return window.EverythingME.debug ? Evme_logger : this.NOOP;
+
+    function Evme_logger() {
       var t = new Date(),
           h = t.getHours(),
           m = t.getMinutes(),
@@ -376,17 +374,17 @@ Evme.Utils = new function Evme_Utils() {
 
   this.writeTextToCanvas = function writeTextToCanvas(options) {
     var context = options.context,
-        text = options.text ? options.text.split(' ') : [],
-        offset = options.offset || 0,
-        lineWidth = 0,
-        currentLine = 0,
-        textToDraw = [],
+      text = options.text ? options.text.split(' ') : [],
+      offset = options.offset || 0,
+      lineWidth = 0,
+      currentLine = 0,
+      textToDraw = [],
 
-        WIDTH = context.canvas.width,
-        FONT_SIZE = options.fontSize || self.APPS_FONT_SIZE,
-        LINE_HEIGHT = FONT_SIZE + window.devicePixelRatio;
+      WIDTH = context.canvas.width,
+      FONT_SIZE = options.fontSize || self.APPS_FONT_SIZE,
+      LINE_HEIGHT = FONT_SIZE + window.devicePixelRatio;
 
-    if (!context || !text) {
+    if (!context || !text.length) {
       return false;
     }
 
@@ -404,34 +402,34 @@ Evme.Utils = new function Evme_Utils() {
     context.shadowColor = self.APP_NAMES_SHADOW_COLOR;
 
     for (var i = 0, word; word = text[i++];) {
-    // add 1 to the word with because of the space between words
-    var size = context.measureText(word + ' ').width,
+      // add 1 to the word with because of the space between words
+      var size = context.measureText(word + ' ').width,
         draw = false,
         pushed = false;
 
-    if (lineWidth + size >= WIDTH) {
-      draw = true;
-      if (textToDraw.length === 0) {
-      textToDraw.push(word);
-      pushed = true;
+      if (lineWidth + size >= WIDTH) {
+        draw = true;
+        if (textToDraw.length === 0) {
+          textToDraw.push(word);
+          pushed = true;
+        }
+      }
+
+      if (draw) {
+        drawText(textToDraw, WIDTH / 2, offset + currentLine * LINE_HEIGHT);
+        currentLine++;
+        textToDraw = [];
+        lineWidth = 0;
+      }
+
+      if (!pushed) {
+        textToDraw.push(word);
+        lineWidth += size;
       }
     }
 
-    if (draw) {
-      drawText(textToDraw, WIDTH / 2, offset + currentLine * LINE_HEIGHT);
-      currentLine++;
-      textToDraw = [];
-      lineWidth = 0;
-    }
-
-    if (!pushed) {
-      textToDraw.push(word);
-      lineWidth += size;
-    }
-    }
-
     if (textToDraw.length > 0) {
-    drawText(textToDraw, WIDTH / 2, offset + currentLine * LINE_HEIGHT);
+      drawText(textToDraw, WIDTH / 2, offset + currentLine * LINE_HEIGHT);
     }
 
     function drawText(text, x, y) {
@@ -631,6 +629,30 @@ Evme.Utils = new function Evme_Utils() {
 
   this.getUrlParam = function getUrlParam(key) {
     return parsedQuery[key];
+  };
+
+  /*
+    Serializes a json object into a querystring
+   */
+  this.serialize = function serialize(params) {
+      var paramArray = [];
+
+      for (var k in params) {
+          var value = params[k],
+              finalValue = '';
+
+          if (typeof value !== 'undefined') {
+              // if not object
+              if (!(value instanceof Object)) {
+                  finalValue = value;
+              // if object and isn't empty
+              } else if (Object.keys(value).length) {
+                  finalValue = JSON.stringify(value);
+              }
+              paramArray.push(k + '=' + encodeURIComponent(finalValue));
+          }
+      }
+      return paramArray.join('&');
   };
 
   this.cssPrefix = function _cssPrefix() {
@@ -946,11 +968,8 @@ Evme.Utils = new function Evme_Utils() {
     }
 
     function getMobileConnection() {
-      // XXX: check bug-926169
-      // this is used to keep all tests passing while introducing multi-sim APIs
-      var mobileConnection = window.navigator.mozMobileConnection ||
-        window.navigator.mozMobileConnections &&
-          window.navigator.mozMobileConnections[0];
+      var mobileConnection = window.navigator.mozMobileConnections &&
+        window.navigator.mozMobileConnections[0];
 
       return mobileConnection;
     }

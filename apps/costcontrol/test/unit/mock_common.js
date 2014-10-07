@@ -1,41 +1,41 @@
+/* global MockAllNetworkInterfaces, Common  */
+/* exported MockCommon */
 'use strict';
+
+requireApp('costcontrol/test/unit/mock_all_network_interfaces.js');
 
 var MockCommon = function(config) {
 
-  function getMockRequiredMessage(mocking, parameter, isAFunction) {
-    var whatIsBeingAccesed = mocking + (isAFunction ? '() is being called' :
-                                                      'is being accessed');
-
-    return 'Please, ' + whatIsBeingAccesed + '. Provide the key `' +
-           parameter + '` in the constructor config object to mock it.';
-  }
-
   config = config || {};
 
-  var fakeAllInterfaces = [
-    {'type': 0, 'id': '0'},
-    {'type': 1, 'id': '8100075100210526976'},
-    {'type': 1, 'id': '1234575100210522938'}
-  ];
+  var allInterfacesFake = MockAllNetworkInterfaces;
 
   return {
     COST_CONTROL_APP: 'app://costcontrol.gaiamobile.org',
     allNetworkInterfaces: {},
-    isValidICCID: function(iccid) {
-      assert.isDefined(
-        config.isValidICCID,
-        getMockRequiredMessage('isValidICCID', 'isValidICCID', true)
-      );
-      return config.isValidICCID;
+    localize: function (element, label, args) {
+      element.textContent = label;
     },
     waitForDOMAndMessageHandler: function(window, callback) {
       callback();
     },
-    checkSIMChange: function(callback) {
-      callback();
-    },
     startFTE: function(mode) {
+      var iframe = document.getElementById('fte_view');
+      iframe.classList.remove('non-ready');
+      if (config && config.activateFTEListener) {
+        window.addEventListener('dataSlotChange', function _onDataSimChange() {
+          window.removeEventListener('dataSlotChange', _onDataSimChange);
+          // Close FTE if change the SimCard for data connections
+          Common.closeFTE();
+        });
+      }
       var event = new CustomEvent('ftestarted', { detail: mode });
+      window.dispatchEvent(event);
+    },
+    closeFTE: function() {
+      var iframe = document.getElementById('fte_view');
+      iframe.classList.add('non-ready');
+      var event = new CustomEvent('fteClosed');
       window.dispatchEvent(event);
     },
     startApp: function() {
@@ -51,20 +51,47 @@ var MockCommon = function(config) {
       window.dispatchEvent(event);
       console.log('Alert: ' + msg);
     },
-    getCurrentSIMInterface: function getCurrentSIMInterface() {
-      var currentSimCard = fakeAllInterfaces[1];
-      return currentSimCard;
+    getDataSIMInterface: function getDataSIMInterface(iccId) {
+      var dataSimCard = allInterfacesFake[1];
+      return dataSimCard;
     },
     getWifiInterface: function() {
-      var wifiInterface = fakeAllInterfaces[0];
+      var wifiInterface = allInterfacesFake[0];
       return wifiInterface;
     },
-    loadNetworkInterfaces: function() {
-      var self = this;
-
+    loadNetworkInterfaces: function(onsuccess, onerror) {
       setTimeout(function() {
-        self.allNetworkInterfaces = fakeAllInterfaces;
+        Common.allNetworkInterfaces = allInterfacesFake;
+        (typeof onsuccess === 'function') && onsuccess();
       }, 0);
+    },
+    loadDataSIMIccId: function(onsuccess, onerror) {
+      setTimeout(function() {
+        Common.dataSimIccId = allInterfacesFake[1].id;
+        if (typeof onsuccess === 'function') {
+          onsuccess(Common.dataSimIccId);
+        }
+      }, 0);
+    },
+    localizeWeekdaySelector: function _localizeWeekdaySelector(selector) {
+      var weekStartsOnMonday =
+        !!parseInt(navigator.mozL10n.get('weekStartsOnMonday'), 10);
+
+      var monday = selector.querySelector('.monday');
+      var sunday = selector.querySelector('.sunday');
+      var list = monday.parentNode;
+      if (weekStartsOnMonday) {
+        list.insertBefore(monday, list.childNodes[0]); // monday is the first
+        list.appendChild(sunday); // sunday is the last
+      } else {
+        list.insertBefore(sunday, list.childNodes[0]); // sunday is the first
+        list.insertBefore(monday, sunday.nextSibling); // monday is the second
+      }
+    },
+    getDataLimit: function _getDataLimit(settings) {
+      var multiplier = (settings.dataLimitUnit === 'MB') ?
+                       1000000 : 1000000000;
+      return settings.dataLimitValue * multiplier;
     }
   };
 };

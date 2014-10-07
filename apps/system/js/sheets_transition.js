@@ -1,30 +1,43 @@
 'use strict';
 
 var SheetsTransition = {
+  transitioning: false,
   _current: null,
   _new: null,
 
+  init: function st_init() {
+    SettingsListener.observe('edgesgesture.enabled', false,
+                             this._settingUpdate.bind(this));
+  },
+
   begin: function st_begin(direction) {
+    this.transitioning = true;
+    this._cleanupPreviousTransitions();
+    // Ask Homescreen App to fade out when sheets begin moving.
+    // Homescreen App would fade in next time it's opened automatically.
+    var home = homescreenLauncher.getHomescreen();
+    home && home.fadeOut();
     var currentSheet = StackManager.getCurrent();
     var newSheet = (direction == 'ltr') ?
       StackManager.getPrev() : StackManager.getNext();
 
-    this._current = currentSheet ? currentSheet.frame : null;
-    this._new = newSheet ? newSheet.frame : null;
+    this._current = currentSheet ? currentSheet.element : null;
+    this._new = newSheet ? newSheet.element : null;
 
     if (this._current) {
+      this._setDuration(this._current, 0);
       this._current.classList.add('inside-edges');
-      this._current.style.transition = 'transform';
     }
 
     if (this._new) {
+      this._setDuration(this._new, 0);
+
       this._new.classList.toggle('outside-edges-left', (direction == 'ltr'));
       this._new.classList.toggle('outside-edges-right', (direction == 'rtl'));
-      if (direction == 'rtl') {
-        this._new.dataset.zIndexLevel = 'top-app';
-      }
-      this._new.style.transition = 'transform';
     }
+
+    // Note that we send sheets-gesture-end from the StackManager!!!
+    window.dispatchEvent(new CustomEvent('sheets-gesture-begin'));
   },
 
   _lastProgress: null,
@@ -37,15 +50,16 @@ var SheetsTransition = {
 
     this._lastProgress = progress;
 
-    var currentFactor = (direction == 'ltr') ? 1 : (overflowing ? -1 : -0.2);
-    var newFactor = (direction == 'ltr') ? 0.2 : -1;
+    var factor = (direction == 'ltr') ? 1 : -1;
+    var offset = (direction == 'ltr') ? '- 2rem' : '+ 2rem';
 
-    this._setTranslate(this._current, progress * currentFactor * 100);
-    this._setTranslate(this._new, (progress - 1) * newFactor * 100);
+    this._setTranslate(this._current, progress * factor * 100);
+    this._setTranslate(this._new, (progress - 1) * factor * 100, offset);
   },
 
-  end: function st_end(callback) {
-    var callbackCalled = false;
+  end: function st_end() {
+    var commited = false;
+    this.transitioning = false;
 
     var sheets = [this._current, this._new];
     sheets.forEach(function(sheet) {
@@ -58,13 +72,10 @@ var SheetsTransition = {
         sheet.classList.remove('outside-edges-left');
         sheet.classList.remove('outside-edges-right');
         sheet.style.transition = '';
-        delete sheet.dataset.zIndexLevel;
 
-        if (!callbackCalled) {
-          callbackCalled = true;
-          if (callback && (typeof(callback) == 'function')) {
-            callback();
-          }
+        if (!commited) {
+          commited = true;
+          StackManager.commit();
         }
       }
 
@@ -76,7 +87,10 @@ var SheetsTransition = {
 
       sheet.style.transform = '';
 
-      sheet.addEventListener('transitionend', function trWait() {
+      sheet.addEventListener('transitionend', function trWait(evt) {
+        if (evt.propertyName != 'transform') {
+          return;
+        }
         sheet.removeEventListener('transitionend', trWait);
         finish();
       });
@@ -87,11 +101,13 @@ var SheetsTransition = {
   },
 
   snapInPlace: function st_snapInPlace() {
-    var duration = 300 - (300 * (1 - this._lastProgress));
+    var TIMEOUT = 300;
+    var duration = TIMEOUT - (TIMEOUT * (1 - this._lastProgress));
     duration = Math.max(duration, 90);
 
     this._setDuration(this._current, duration);
     this._setDuration(this._new, duration);
+    this.end();
   },
 
   snapBack: function st_snapBack(speed) {
@@ -126,14 +142,22 @@ var SheetsTransition = {
       this._new.classList.remove('outside-edges-left');
       this._new.classList.add('inside-edges');
     }
+
+    this.end();
   },
 
-  _setTranslate: function st_setTranslate(sheet, percentage) {
+  _setTranslate: function st_setTranslate(sheet, percentage, offset) {
     if (!sheet) {
       return;
     }
 
-    sheet.style.transform = 'translateX(' + percentage + '%)';
+    var transform;
+    if (offset) {
+      transform = 'translateX(calc(' + percentage + '% ' + offset + '))';
+    } else {
+      transform = 'translateX(' + percentage + '%)';
+    }
+    sheet.style.transform = transform;
   },
 
   _setDuration: function st_setDuration(sheet, ms) {
@@ -142,5 +166,25 @@ var SheetsTransition = {
     }
 
     sheet.style.transition = 'transform ' + ms + 'ms linear';
+  },
+
+  _cleanupPreviousTransitions: function st_cleanUpPreviousTransitions() {
+    var sheets = [this._current, this._new];
+    sheets.forEach(function(sheet) {
+      if (sheet) {
+        sheet.style.transform = '';
+        sheet.classList.remove('inside-edges');
+        sheet.classList.remove('outside-edges-left');
+        sheet.classList.remove('outside-edges-right');
+        sheet.style.transition = '';
+      }
+    });
+  },
+
+  _edgesEnabled: false,
+  _settingUpdate: function st_settingUpdate(enabled) {
+    this._edgesEnabled = enabled;
   }
 };
+
+SheetsTransition.init();

@@ -1,7 +1,10 @@
+/*global Factory */
+
 requireLib('models/calendar.js');
 requireLib('models/account.js');
 
 suiteGroup('Controllers.Sync', function() {
+  'use strict';
 
   var account;
   var calendar;
@@ -22,8 +25,6 @@ suiteGroup('Controllers.Sync', function() {
   }
 
   setup(function(done) {
-    this.timeout(10000);
-
     app = testSupport.calendar.app();
     db = app.db;
     subject = new Calendar.Controllers.Sync(app);
@@ -239,11 +240,9 @@ suiteGroup('Controllers.Sync', function() {
     suite('#calendar', function() {
 
       test('multiple in progress', function() {
-        var complete = 0;
-
         subject.calendar(accModel, calendars[0]);
         assertEmit('syncStart');
-        delete events['syncStart'];
+        delete events.syncStart;
 
         subject.calendar(accModel, calendars[1]);
         assertDoesNotEmit('syncStart');
@@ -268,7 +267,7 @@ suiteGroup('Controllers.Sync', function() {
         });
         assertEmit('syncStart');
 
-        assert.length(calendarSyncCalls, 1, 'emits syncComplete');
+        assert.lengthOf(calendarSyncCalls, 1, 'emits syncComplete');
 
         var sync = calendarSyncCalls[0];
 

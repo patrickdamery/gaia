@@ -1,3 +1,5 @@
+/*global Factory */
+
 requireLib('calendar.js');
 requireLib('db.js');
 requireLib('ext/uuid.js');
@@ -7,21 +9,20 @@ requireLib('models/event.js');
 requireLib('presets.js');
 
 suite('db', function() {
+  'use strict';
+
   var subject;
-  var name;
   var app;
 
   var dbName = 'calendar-db-test-db';
 
   suiteSetup(function(done) {
-
     // load the required sub-objects..
     app = testSupport.calendar.app();
     app.loadObject('Provider.Local', done);
   });
 
   suiteSetup(function(done) {
-    this.timeout(10000);
     var db = new Calendar.Db(dbName);
     db.deleteDatabase(function(err, success) {
       assert.ok(!err, 'should not have an error when deleting db');
@@ -43,7 +44,7 @@ suite('db', function() {
     assert.instanceOf(result, Calendar.Store.Account);
 
     assert.equal(result.db, subject);
-    assert.equal(subject._stores['Account'], result);
+    assert.equal(subject._stores.Account, result);
   });
 
   test('initialization', function() {
@@ -126,7 +127,7 @@ suite('db', function() {
         test('default account', function() {
           var list = Object.keys(storeLoads.accounts);
 
-          assert.length(list, 1);
+          assert.lengthOf(list, 1);
 
           var item = storeLoads.accounts[list[0]];
 
@@ -137,7 +138,7 @@ suite('db', function() {
 
         test('default calendar', function() {
           var list = Object.keys(storeLoads.calendars);
-          assert.length(list, 1);
+          assert.lengthOf(list, 1);
 
           var item = storeLoads.calendars[list[0]];
 
@@ -246,6 +247,7 @@ suite('db', function() {
 
 
           subject.open(OLD_VERSION, function() {
+            var trans = null;
             calendarStore.persist(Factory('calendar',
               { _id: LOCAL_CALENDAR }), trans);
 
@@ -286,7 +288,7 @@ suite('db', function() {
               busytimeStore.persist(obj, trans);
             });
 
-            var trans = subject.transaction(
+            trans = subject.transaction(
               ['busytimes', 'calendars', 'events'],
               'readwrite'
             );
@@ -319,7 +321,7 @@ suite('db', function() {
         test('should not modify event int calendarId', function(done) {
           var trans = subject.transaction(['events'], 'readwrite');
           var store = trans.objectStore('events');
-          var get = store.get(EVENT_TWO_ID).onsuccess = function(evt) {
+          store.get(EVENT_TWO_ID).onsuccess = function(evt) {
             assert.strictEqual(evt.target.result.calendarId, 2);
             done();
           };
@@ -328,7 +330,7 @@ suite('db', function() {
         test('should delete event if its calendar died', function(done) {
           var trans = subject.transaction(['events'], 'readwrite');
           var store = trans.objectStore('events');
-          var get = store.get(EVENT_THREE_ID).onsuccess = function(evt) {
+          store.get(EVENT_THREE_ID).onsuccess = function(evt) {
             assert.strictEqual(evt.target.result, undefined);
             done();
           };
@@ -337,7 +339,7 @@ suite('db', function() {
         test('should turn busytime str calendarId into int', function(done) {
           var trans = subject.transaction(['busytimes'], 'readwrite');
           var store = trans.objectStore('busytimes');
-          var get = store.get(BUSYTIME_ONE_ID).onsuccess = function(evt) {
+          store.get(BUSYTIME_ONE_ID).onsuccess = function(evt) {
             assert.strictEqual(evt.target.result.calendarId, LOCAL_CALENDAR);
             done();
           };
@@ -346,7 +348,7 @@ suite('db', function() {
         test('should not modify busytime int calendarId', function(done) {
           var trans = subject.transaction(['busytimes'], 'readwrite');
           var store = trans.objectStore('busytimes');
-          var get = store.get(BUSYTIME_TWO_ID).onsuccess = function(evt) {
+          store.get(BUSYTIME_TWO_ID).onsuccess = function(evt) {
             assert.strictEqual(evt.target.result.calendarId, 2);
             done();
           };
@@ -355,7 +357,7 @@ suite('db', function() {
         test('should delete busytime if its calendar died', function(done) {
           var trans = subject.transaction(['busytimes'], 'readwrite');
           var store = trans.objectStore('busytimes');
-          var get = store.get(BUSYTIME_THREE_ID).onsuccess = function(evt) {
+          store.get(BUSYTIME_THREE_ID).onsuccess = function(evt) {
             assert.strictEqual(evt.target.result, undefined);
             done();
           };
@@ -363,6 +365,7 @@ suite('db', function() {
       });
 
       suite('Bug 851003', function() {
+        /*jshint -W027 */
         /** bug 912087: renable once tests pass consistently */
         return;
 
@@ -410,6 +413,8 @@ suite('db', function() {
 
 
           subject.open(OLD_VERSION, function() {
+            var trans = null;
+
             calendarStore.persist(Factory('calendar', { _id: 1 }), trans);
 
             [
@@ -449,7 +454,7 @@ suite('db', function() {
               busytimeStore.persist(obj, trans);
             });
 
-            var trans = subject.transaction(
+            trans = subject.transaction(
               ['busytimes', 'calendars', 'events'],
               'readwrite'
             );
@@ -481,7 +486,7 @@ suite('db', function() {
           subject.open(OLD_VERSION + 1, function() {
             var trans = subject.transaction(['events'], 'readwrite');
             var store = trans.objectStore('events');
-            var get = store.get(EVENT_TWO_ID).onsuccess = function(evt) {
+            store.get(EVENT_TWO_ID).onsuccess = function(evt) {
               assert.strictEqual(evt.target.result.calendarId, 2);
               done();
             };
@@ -492,7 +497,7 @@ suite('db', function() {
           subject.open(OLD_VERSION + 1, function() {
             var trans = subject.transaction(['events'], 'readwrite');
             var store = trans.objectStore('events');
-            var get = store.get(EVENT_THREE_ID).onsuccess = function(evt) {
+            store.get(EVENT_THREE_ID).onsuccess = function(evt) {
               assert.strictEqual(evt.target.result, undefined);
               done();
             };
@@ -503,7 +508,7 @@ suite('db', function() {
           subject.open(OLD_VERSION + 1, function() {
             var trans = subject.transaction(['busytimes'], 'readwrite');
             var store = trans.objectStore('busytimes');
-            var get = store.get(BUSYTIME_ONE_ID).onsuccess = function(evt) {
+            store.get(BUSYTIME_ONE_ID).onsuccess = function(evt) {
               assert.strictEqual(evt.target.result.calendarId, 1);
               done();
             };
@@ -514,7 +519,7 @@ suite('db', function() {
           subject.open(OLD_VERSION + 1, function() {
             var trans = subject.transaction(['busytimes'], 'readwrite');
             var store = trans.objectStore('busytimes');
-            var get = store.get(BUSYTIME_TWO_ID).onsuccess = function(evt) {
+            store.get(BUSYTIME_TWO_ID).onsuccess = function(evt) {
               assert.strictEqual(evt.target.result.calendarId, 2);
               done();
             };
@@ -525,7 +530,7 @@ suite('db', function() {
           subject.open(OLD_VERSION + 1, function() {
             var trans = subject.transaction(['busytimes'], 'readwrite');
             var store = trans.objectStore('busytimes');
-            var get = store.get(BUSYTIME_THREE_ID).onsuccess = function(evt) {
+            store.get(BUSYTIME_THREE_ID).onsuccess = function(evt) {
               assert.strictEqual(evt.target.result, undefined);
               done();
             };

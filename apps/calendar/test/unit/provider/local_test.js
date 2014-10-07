@@ -1,13 +1,15 @@
+/*global Factory */
+
 requireLib('timespan.js');
 
-var uuid;
-
 suiteGroup('Provider.Local', function() {
+  'use strict';
 
   var subject;
   var app;
   var db;
   var controller;
+  var shouldDisplay;
 
   setup(function(done) {
     app = testSupport.calendar.app();
@@ -16,6 +18,10 @@ suiteGroup('Provider.Local', function() {
     });
 
     controller = app.timeController;
+    shouldDisplay = controller._shouldDisplayBusytime;
+    controller._shouldDisplayBusytime = function() {
+      return true;
+    };
 
     db = app.db;
     db.open(function(err) {
@@ -25,6 +31,7 @@ suiteGroup('Provider.Local', function() {
   });
 
   teardown(function(done) {
+    controller._shouldDisplayBusytime = shouldDisplay;
     testSupport.calendar.clearStore(
       db,
       ['accounts', 'calendars', 'events', 'busytimes'],

@@ -1,9 +1,12 @@
 requireLib('provider/abstract.js');
+requireLib('provider/local.js');
 requireLib('template.js');
+requireLib('templates/date_span.js');
 requireLib('templates/alarm.js');
 requireElements('calendar/elements/show_event.html');
 
 suiteGroup('Views.ViewEvent', function() {
+  'use strict';
 
   var subject;
   var controller;
@@ -20,10 +23,6 @@ suiteGroup('Views.ViewEvent', function() {
   var calendarStore;
   var accountStore;
 
-  function hasClass(value) {
-    return subject.element.classList.contains(value);
-  }
-
   function getEl(name) {
     return subject.getEl(name);
   }
@@ -34,9 +33,7 @@ suiteGroup('Views.ViewEvent', function() {
   }
 
   var triggerEvent;
-  var InputParser;
   suiteSetup(function() {
-    InputParser = Calendar.Utils.InputParser;
     triggerEvent = testSupport.calendar.triggerEvent;
   });
 
@@ -95,12 +92,6 @@ suiteGroup('Views.ViewEvent', function() {
     }
   );
 
-  var remote;
-  var event;
-  var calendar;
-  var account;
-  var busytime;
-
   setup(function() {
     remote = this.event.remote;
     event = this.event;
@@ -121,8 +112,8 @@ suiteGroup('Views.ViewEvent', function() {
     assert.ok(subject.primaryButton);
   });
 
-  test('.cancelButton', function() {
-    assert.ok(subject.cancelButton);
+  test('.header', function() {
+    assert.ok(subject.header);
   });
 
   test('.fieldRoot', function() {
@@ -168,10 +159,6 @@ suiteGroup('Views.ViewEvent', function() {
       var expected = {
         title: remote.title,
         location: remote.location,
-        startDate: subject.formatDate(remote.startDate),
-        startTime: subject.formatTime(remote.startDate),
-        endDate: subject.formatDate(remote.endDate),
-        endTime: subject.formatTime(remote.endDate),
         currentCalendar: calendar.remote.name,
         description: remote.description
       };
@@ -181,10 +168,8 @@ suiteGroup('Views.ViewEvent', function() {
         'endTime'
       ];
 
-      var key;
-
       if (overrides) {
-        for (key in overrides) {
+        for (var key in overrides) {
           expected[key] = overrides[key];
         }
       }
@@ -194,10 +179,10 @@ suiteGroup('Views.ViewEvent', function() {
           expected.calendarId = event.calendarId;
         }
 
-        for (key in expected) {
+        function replaceCaps($1) { return '-' + $1.toLowerCase(); }
+        for (var key in expected) {
 
           // To dash-delimited
-          function replaceCaps($1) { return '-' + $1.toLowerCase(); }
           var fieldKey = key.replace(/([A-Z])/g, replaceCaps);
 
           if (isAllDay && allDayHidden.indexOf(key) !== -1) {
@@ -249,17 +234,6 @@ suiteGroup('Views.ViewEvent', function() {
       );
     });
 
-    test('when start & end times are 00:00:00', function(done) {
-      remote.startDate = new Date(2012, 0, 1);
-      remote.endDate = new Date(2012, 0, 2);
-
-      updatesValues(
-        { endDate: '01/01/2012' },
-        true,
-        done
-      );
-    });
-
     test('alarms are displayed', function(done) {
 
       event.remote.alarms = [
@@ -291,13 +265,6 @@ suiteGroup('Views.ViewEvent', function() {
     });
   });
 
-  suite('#formatTime', function() {
-    test('returns empty if invalid', function() {
-      var result = subject.formatTime();
-      assert.equal('', result);
-    });
-  });
-
   suite('navigation', function() {
     test('cancel button step back', function(done) {
 
@@ -308,7 +275,7 @@ suiteGroup('Views.ViewEvent', function() {
 
       subject._returnTop = '/foo';
 
-      triggerEvent(subject.cancelButton, 'click');
+      triggerEvent(subject.header, 'action');
     });
 
     test('cancel button return top', function(done) {
@@ -320,7 +287,7 @@ suiteGroup('Views.ViewEvent', function() {
 
       subject._returnTo = '/bar';
 
-      triggerEvent(subject.cancelButton, 'click');
+      triggerEvent(subject.header, 'action');
     });
 
     test('edit button click', function(done) {

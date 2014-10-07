@@ -4,10 +4,17 @@
 require('/shared/test/unit/mocks/mock_download.js');
 requireApp('settings/test/unit/mock_l10n.js');
 require('/shared/js/download/download_formatter.js');
+require('/shared/test/unit/mocks/mock_lazy_loader.js');
 
 
 suite('DownloadFormatter', function() {
   var realL10n;
+
+  var mocksHelperForDownloadFormatter = new MocksHelper([
+    'LazyLoader'
+  ]).init();
+
+  mocksHelperForDownloadFormatter.attachTestHelpers();
 
   suiteSetup(function() {
     realL10n = navigator.mozL10n;
@@ -16,6 +23,7 @@ suite('DownloadFormatter', function() {
 
   suiteTeardown(function() {
     navigator.mozL10n = realL10n;
+    realL10n = null;
   });
 
   var l10nSpy;
@@ -37,16 +45,40 @@ suite('DownloadFormatter', function() {
     assert.equal(params.unit, 'byteUnit-KB');
   });
 
+  test(' getFormattedSize MB', function() {
+    var bytes = 1024 * 1024 * 999; // 999 MB
+    DownloadFormatter.getFormattedSize(bytes);
+    assert.equal(l10nSpy.args[1][0], 'fileSize');
+
+    var params = l10nSpy.args[1][1];
+    assert.equal(params.size, 999);
+    assert.equal(params.unit, 'byteUnit-MB');
+  });
+
+  test(' getFormattedSize GB', function() {
+    var bytes = 1024 * 1024 * 1024 * 2.6; // 2.6 GB
+    DownloadFormatter.getFormattedSize(bytes);
+    assert.equal(l10nSpy.args[1][0], 'fileSize');
+
+    var params = l10nSpy.args[1][1];
+    assert.equal(params.size, 2.6);
+    assert.equal(params.unit, 'byteUnit-GB');
+  });
+
   test(' getPercentage', function() {
-    var percentage = DownloadFormatter.getFormattedPercentage(51.1, 100);
-    assert.equal(percentage, 51.10);
+    var mockDownload = new MockDownload({
+      totalBytes: 1024 * 100,
+      currentBytes: 1024 * 50
+    });
+    var percentage = DownloadFormatter.getPercentage(mockDownload);
+    assert.equal(percentage, 50);
   });
 
   test(' getFileName', function() {
-    var url = 'http://firefoxos.com/file/nameFile.mp3';
+    var path = '/mnt/sdcard/nameFile.mp3';
     var mockDownload = new MockDownload(
       {
-        url: url
+        path: path
       }
     );
     assert.equal(DownloadFormatter.getFileName(mockDownload), 'nameFile.mp3');
@@ -172,43 +204,37 @@ suite('DownloadFormatter', function() {
     assert.equal(params.unit, 'byteUnit-TB');
   });
 
-
-  test(' getDownloadedPercentage without decimals', function() {
-    var total = 1024 * 1024 * 1024; // 1 GB
-    var currently = total * 0.5; // 0.5 GB or 50 %
-    var mockDownload = new MockDownload(
-      {
-        totalBytes: total,
-        currentBytes: currently
-      }
-    );
-    var percentage = DownloadFormatter.getDownloadedPercentage(mockDownload);
-    assert.equal(percentage, '50');
-  });
-
-  test(' getDownloadedPercentage with decimals', function() {
-    var total = 1024 * 1024 * 1024; // 1 GB
-    var currently = total * 0.611; // 0.611 GB or 61.10 %
-    var mockDownload = new MockDownload(
-      {
-        totalBytes: total,
-        currentBytes: currently
-      }
-    );
-    var percentage = DownloadFormatter.getDownloadedPercentage(mockDownload);
-    assert.equal(percentage, '61.10');
-  });
-
   test(' getUUID', function() {
     var now = new Date();
+    var expectedUUID = 'download-69';
     var mockDownload = new MockDownload(
       {
-        url: 'http://firefoxos.com/fichero.mp4',
-        startTime: now
+        id: expectedUUID
       }
     );
-    var expectedUUID = 'fichero.mp4' + now.getTime();
     var retrievedUUID = DownloadFormatter.getUUID(mockDownload);
     assert.equal(retrievedUUID, expectedUUID);
+  });
+
+  test(' getDate', function(done) {
+    var now = new Date();
+    var expectedPrettyDate = 'pretty' + now.toString();
+    var stub = sinon.stub(navigator.mozL10n, 'DateTimeFormat', function(date) {
+      return {
+        fromNow: function(date, useCompactFormat) {
+          assert.isUndefined(useCompactFormat);
+          return 'pretty' + date.toString();
+        }
+      };
+    });
+
+    var mockDownload = new MockDownload({
+      startTime: now
+    });
+
+    DownloadFormatter.getDate(mockDownload, function(date) {
+      assert.equal(date, expectedPrettyDate);
+      done();
+    });
   });
 });

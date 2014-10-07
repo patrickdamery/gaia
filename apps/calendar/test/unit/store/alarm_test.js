@@ -1,9 +1,12 @@
+/*global Factory */
+
 requireLib('calc.js');
 requireLib('db.js');
 requireLib('store/abstract.js');
 requireLib('store/alarm.js');
 
 suite('store/alarm', function() {
+  'use strict';
 
   var subject;
   var db;
@@ -12,7 +15,6 @@ suite('store/alarm', function() {
 
 
   setup(function(done) {
-    this.timeout(5000);
     app = testSupport.calendar.app();
     db = app.db;
     controller = app.alarmController;
@@ -168,17 +170,6 @@ suite('store/alarm', function() {
     });
   }
 
-  function getAll(cb) {
-    var trans = subject.db.transaction('alarms');
-    var store = trans.objectStore('alarms');
-
-    store.mozGetAll().onsuccess = function(e) {
-      cb(e.target.result);
-    };
-
-    store.mozGetAll().onerror = cb;
-  }
-
   suite('#workQueue', function() {
     var getAllResults = [];
     var added = [];
@@ -197,8 +188,9 @@ suite('store/alarm', function() {
             target: req
           };
 
-          if (req.onsuccess)
+          if (req.onsuccess) {
             req.onsuccess(event);
+          }
 
           req.emit('success', event);
 
@@ -212,10 +204,11 @@ suite('store/alarm', function() {
         var req = new Calendar.Responder();
 
         setTimeout(function() {
-          var id = lastId++;
+          lastId++;
 
-          if (req.onsuccess)
+          if (req.onsuccess) {
             req.onsuccess(lastId);
+          }
 
           req.emit('success', lastId);
 
@@ -288,7 +281,7 @@ suite('store/alarm', function() {
       });
 
       test('after', function() {
-        assert.length(added, 0);
+        assert.lengthOf(added, 0);
       });
     });
 
@@ -303,7 +296,7 @@ suite('store/alarm', function() {
       });
 
       test('after complete', function() {
-        assert.length(added, 1);
+        assert.lengthOf(added, 1);
 
         assert.deepEqual(
           added[0][0],
@@ -321,7 +314,7 @@ suite('store/alarm', function() {
       });
 
       test('after complete', function() {
-        assert.length(added, 1);
+        assert.lengthOf(added, 1);
 
         assert.deepEqual(
           added[0][0],
@@ -384,7 +377,7 @@ suite('store/alarm', function() {
       */
 
       test('after complete', function() {
-        assert.length(added, 2);
+        assert.lengthOf(added, 2);
 
         assert.deepEqual(added[0][0], new Date(2018, 0, 1, 5));
         assert.equal(

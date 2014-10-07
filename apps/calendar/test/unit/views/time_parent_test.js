@@ -2,27 +2,14 @@ require('/shared/js/gesture_detector.js');
 requireLib('timespan.js');
 
 suiteGroup('Views.TimeParent', function() {
+  'use strict';
 
   var testEl;
-  var viewDate = new Date(2012, 1, 15);
   var app;
   var subject;
   var id;
-  var scrollTop;
   var controller;
-
   var TimeParent;
-
-  function mapKeys(map) {
-    return map.items.map(function(item) {
-      return item[0];
-    });
-  }
-
-  function viewActive(id) {
-    var view = subject.frames.get(id);
-    return view.active;
-  }
 
   function ChildView(options) {
     this.date = options.date;
@@ -227,7 +214,7 @@ suiteGroup('Views.TimeParent', function() {
 
       assert.ok(!curFrame.active, 'deactivated previously current');
       assert.ok(subject.frames.get(curId), 'previous id is still present');
-      assert.length(subject.frames, 4);
+      assert.lengthOf(subject.frames, 4);
     });
 
     test('max frame pruge', function() {
@@ -256,13 +243,13 @@ suiteGroup('Views.TimeParent', function() {
       next = subject.frames.get(next);
 
       // verify frames exist
-      assert.length(subject.frames, 3, 'trims extra frames when over max');
+      assert.lengthOf(subject.frames, 3, 'trims extra frames when over max');
       assert.ok(subject.frames.has(cur), 'cur');
       assert.ok(subject.frames.has(prev), 'prev');
       assert.ok(subject.frames.has(next), 'next');
 
       // verify other children where removed
-      assert.length(subject.frameContainer.children, 3);
+      assert.lengthOf(subject.frameContainer.children, 3);
     });
 
     test('the same scrollTop between day ane week views', function() {
@@ -309,6 +296,7 @@ suiteGroup('Views.TimeParent', function() {
       items = Object.create(null);
 
       function destroy() {
+        /*jshint validthis:true */
         this.destroyed = true;
       }
 
@@ -394,5 +382,4 @@ suiteGroup('Views.TimeParent', function() {
     });
 
   });
-
 });

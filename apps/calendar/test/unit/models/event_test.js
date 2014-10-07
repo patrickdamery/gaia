@@ -1,7 +1,9 @@
+/*global Factory */
+
 suiteGroup('Models.Event', function() {
+  'use strict';
 
   var subject;
-  var provider;
   var rawEvent;
   var remote;
 
@@ -219,7 +221,7 @@ suiteGroup('Models.Event', function() {
 
     function hasError(event, type) {
       var errors = event.validationErrors();
-      assert.length(errors, 1);
+      assert.lengthOf(errors, 1);
       assert.deepEqual(
         errors[0], {
           name: type
@@ -234,10 +236,10 @@ suiteGroup('Models.Event', function() {
       event.endDate = new Date(2012, 0, 1);
 
       // start date > end date
-      hasError(event, 'start-after-end');
+      hasError(event, 'start-date-after-end-date');
       // start date == end date
       event.startDate = new Date(event.endDate.valueOf());
-      hasError(event, 'start-after-end');
+      hasError(event, 'start-date-after-end-date');
     });
   });
 
@@ -270,7 +272,7 @@ suiteGroup('Models.Event', function() {
     test('does not update attributes', function() {
       var errors = model.updateAttributes(eventWithErrors);
       assert.ok(errors);
-      assert.deepEqual(errors[0].name, 'start-after-end');
+      assert.deepEqual(errors[0].name, 'start-date-after-end-date');
     });
 
     test('will update attributes', function() {

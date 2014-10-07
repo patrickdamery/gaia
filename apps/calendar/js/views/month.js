@@ -1,6 +1,6 @@
 Calendar.ns('Views').Month = (function() {
+  'use strict';
 
-  var template = Calendar.Templates.Month;
   var Calc = Calendar.Calc;
   var Parent = Calendar.Views.TimeParent;
 
@@ -9,6 +9,8 @@ Calendar.ns('Views').Month = (function() {
    */
   function Month(options) {
     Parent.apply(this, arguments);
+    // default to today
+    this._selectedDay = new Date();
   }
 
   Month.prototype = {
@@ -55,13 +57,12 @@ Calendar.ns('Views').Month = (function() {
 
       if (el) {
         el.classList.add(this.SELECTED);
+        this._selectedDay = date;
       }
     },
 
     _initEvents: function() {
-      var self = this;
       this.controller = this.app.timeController;
-
 
       Parent.prototype._initEvents.apply(this, arguments);
 
@@ -85,7 +86,6 @@ Calendar.ns('Views').Month = (function() {
         case 'selectedDayChange':
           this._selectDay(e.data[0]);
           break;
-
         case 'monthChange':
           this._clearSelectedDay();
           this.changeDate(e.data[0]);

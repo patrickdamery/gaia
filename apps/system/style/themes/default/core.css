@@ -9,14 +9,25 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 1.5rem 0 7rem;
+  padding: 0 0 7rem;
   color: #fff;
   font-size: 0;
   white-space: nowrap;
-  background: url(images/ui/pattern.png), url(images/ui/gradient.png) no-repeat;
+  background: #2d2d2d;
   background-size: auto auto, 100% 100%;
   z-index: 100;
   overflow: hidden;
+}
+
+#screen.software-button-enabled [role="dialog"].generic-dialog {
+  bottom: var(--software-home-button-height);
+}
+
+@media (orientation: landscape) {
+  #screen.software-button-enabled [role="dialog"].generic-dialog {
+    bottom: 0;
+    right: var(--software-home-button-height);
+  }
 }
 
 [role="dialog"].generic-dialog:before {
@@ -24,7 +35,7 @@
   display: inline-block;
   vertical-align: middle;
   width: 0.1rem;
-  height: 100%;
+  height: calc(100% - 7rem);
 }
 
 [role="dialog"].generic-dialog .inner {
@@ -39,19 +50,19 @@
 [role="dialog"].generic-dialog h3 {
   font-weight: normal;
   font-size: 1.6rem;
-  line-height: 1em;
+  line-height: 1.5rem;
   color: #fff;
   border-bottom: 0.1rem solid #686868;
   margin: 0 0 1rem;
-  padding-bottom: 1rem;
+  padding: 0 1.5rem 1.5rem;
 }
 
 [role="dialog"].generic-dialog menu:not([type="toolbar"]) {
   white-space: nowrap;
   margin: 0;
-  padding: 1.5rem;
+  padding: 1.5rem 1rem;
   border-top: solid 0.1rem rgba(255, 255, 255, 0.1);
-  background: #2d2d2d url(images/ui/pattern.png) repeat left top;
+  background: #2d2d2d;
   display: block;
   overflow: hidden;
   position: absolute;
@@ -60,21 +71,10 @@
   bottom: 0;
 }
 
-[role="dialog"].generic-dialog menu:not([type="toolbar"]) button:last-child,
-[role="dialog"].generic-dialog menu:not([type="toolbar"]) a[role="button"]:last-child {
-  margin-left: 1rem;
-}
-
-[role="dialog"].generic-dialog menu:not([type="toolbar"]) button,
-[role="dialog"].generic-dialog menu:not([type="toolbar"]) a[role="button"],
-[role="dialog"].generic-dialog menu:not([type="toolbar"]) button:first-child,
-[role="dialog"].generic-dialog menu:not([type="toolbar"]) a[role="button"]:first-child {
-  margin: 0;
-}
-
 [role="dialog"].generic-dialog menu:not([type="toolbar"])[data-items="2"] button,
 [role="dialog"].generic-dialog menu:not([type="toolbar"])[data-items="2"] a[role="button"] {
-  width: calc((100% - 1rem) / 2);
+  width: calc((100% - 2rem) / 2);
+  margin: 0 0.5rem;
 }
 
 
@@ -103,11 +103,9 @@
   [role="dialog"].generic-dialog {
     -moz-box-sizing: border-box;
     position: absolute;
-    top: calc(50% - 24rem);
-    left: calc(50% - 34rem);
     width: 68rem;
     height: 48rem;
-    padding: 6rem 6rem;
+    padding: 0;
     font-size: 2.2rem;
     background-image: none;
     background-color: #333333;
@@ -129,7 +127,7 @@
   }
 
   [role="dialog"].generic-dialog menu:not([type="toolbar"]) {
-    padding: 2.5rem 7.5rem;
+    padding: 1.5rem 0;
   }
 
   [role="dialog"].generic-dialog menu:not([type="toolbar"]) {
@@ -160,5 +158,11 @@
     font-weight: 400;
     width: 18rem;
     height: 4rem;
+  }
+
+  /* XXX need move to shared */
+  form[role="dialog"][data-type="confirm"] {
+    top: calc(50% - 23rem); /* dialog height 46rem */
+    left: calc(50% - 34rem); /* dialog width 68rem */
   }
 }

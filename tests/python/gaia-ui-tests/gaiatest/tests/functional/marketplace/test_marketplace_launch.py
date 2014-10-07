@@ -14,14 +14,13 @@ class TestMarketplaceLaunch(GaiaTestCase):
     
     def setUp(self):
         GaiaTestCase.setUp(self)
-        self.apps.set_permission('Homescreen', 'geolocation', 'deny')
         self.connect_to_network()
     
     def test_marketplace_launch(self):
         
         app_name = 'Marketplace'
         homescreen = Homescreen(self.marionette)
-        homescreen.switch_to_homescreen_frame()
+        self.apps.switch_to_displayed_app()
         
         self.assertTrue(homescreen.is_app_installed(app_name))
         

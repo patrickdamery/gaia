@@ -1,10 +1,9 @@
 <element name="languages" extends="section">
   <template>
 
-    <header>
-      <a href="#root"><span class="icon icon-back">back</span></a>
-      <h1 data-l10n-id="language"> Language </h1>
-    </header>
+    <gaia-header action="back" data-href="#root">
+      <h1 data-l10n-id="language-header"> Language </h1>
+    </gaia-header>
 
     <div>
       <ul>
@@ -43,8 +42,6 @@
       </ul>
     </div>
 
-    <script src="shared/js/keyboard_helper.js"></script>
-    <script src="js/languages.js"></script>
-
+    <panel data-path="panels/languages/panel"></panel>
   </template>
 </element>

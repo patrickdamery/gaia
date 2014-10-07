@@ -1,4 +1,5 @@
 Calendar.ns('Store').Alarm = (function() {
+  'use strict';
 
   var Calc = Calendar.Calc;
 
@@ -18,6 +19,11 @@ Calendar.ns('Store').Alarm = (function() {
   function Alarm() {
     Calendar.Store.Abstract.apply(this, arguments);
     this._processQueue = this._processQueue.bind(this);
+
+    Calendar.Promise.denodeifyAll(this, [
+      'findAllByBusytimeId',
+      'workQueue'
+    ]);
   }
 
   Alarm.prototype = {
@@ -66,8 +72,9 @@ Calendar.ns('Store').Alarm = (function() {
      * Manage the queue when alarms are added.
      */
     _addDependents: function(obj, trans) {
-      if (!this.autoQueue)
+      if (!this.autoQueue) {
         return;
+      }
 
       // by using processQueue even if we added
       // 6000 alarms during a single transaction we only

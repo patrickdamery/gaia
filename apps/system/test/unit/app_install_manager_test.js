@@ -8,16 +8,18 @@ requireApp('system/test/unit/mock_notification_screen.js');
 requireApp('system/test/unit/mock_applications.js');
 requireApp('system/test/unit/mock_utility_tray.js');
 requireApp('system/test/unit/mock_modal_dialog.js');
-requireApp('system/test/unit/mock_l10n.js');
-requireApp('system/test/unit/mock_template.js');
+require('/shared/test/unit/mocks/mock_l10n.js');
 requireApp('system/test/unit/mock_ftu_launcher.js');
+requireApp('system/test/unit/mock_keyboard_manager.js');
 
+require('/shared/js/template.js');
 require('/shared/test/unit/mocks/mock_lazy_loader.js');
 require('/shared/test/unit/mocks/mock_manifest_helper.js');
 require('/shared/test/unit/mocks/mock_navigator_wake_lock.js');
+require('/shared/test/unit/mocks/mock_navigator_moz_apps.js');
+require('/shared/test/unit/mocks/mock_keyboard_helper.js');
 
 requireApp('system/js/app_install_manager.js');
-
 var mocksForAppInstallManager = new MocksHelper([
   'StatusBar',
   'SystemBanner',
@@ -28,14 +30,15 @@ var mocksForAppInstallManager = new MocksHelper([
   'ManifestHelper',
   'LazyLoader',
   'FtuLauncher',
-  'Template'
+  'KeyboardManager',
+  'KeyboardHelper'
 ]).init();
 
 suite('system/AppInstallManager >', function() {
   var realL10n;
   var realDispatchResponse;
   var realRequestWakeLock;
-  var realTemplate;
+  var realMozApps;
 
   var fakeDialog, fakeNotif;
   var fakeInstallCancelDialog, fakeDownloadCancelDialog;
@@ -43,6 +46,8 @@ suite('system/AppInstallManager >', function() {
 
   var lastL10nParams = null;
   var lastDispatchedResponse = null;
+
+  var realApplications;
 
   mocksForAppInstallManager.attachTestHelpers();
   suiteSetup(function() {
@@ -59,6 +64,9 @@ suite('system/AppInstallManager >', function() {
       }
     };
 
+    realApplications = window.applications;
+    window.applications = MockApplications;
+
     realDispatchResponse = AppInstallManager.dispatchResponse;
     AppInstallManager.dispatchResponse = function fakeDispatch(id, type) {
       lastDispatchedResponse = {
@@ -69,6 +77,9 @@ suite('system/AppInstallManager >', function() {
 
     realRequestWakeLock = navigator.requestWakeLock;
     navigator.requestWakeLock = MockNavigatorWakeLock.requestWakeLock;
+
+    realMozApps = navigator.mozApps;
+    navigator.mozApps = MockNavigatormozApps;
   });
 
   suiteTeardown(function() {
@@ -88,6 +99,10 @@ suite('system/AppInstallManager >', function() {
     navigator.requestWakeLock = realRequestWakeLock;
     realRequestWakeLock = null;
 
+    navigator.mozApps = realMozApps;
+    realMozApps = null;
+    window.applications = realApplications;
+    realApplications = null;
   });
 
   setup(function() {
@@ -134,7 +149,7 @@ suite('system/AppInstallManager >', function() {
         'Are you sure you want to cancel this install?</p>',
         '<menu>',
           '<button id="app-install-confirm-cancel-button" type="reset" ' +
-          'data-l10n-id="cancel-install">Cancel Install</button>',
+          'data-l10n-id="cancel-install-button">Cancel Install</button>',
           '<button id="app-install-resume-button" type="submit" ' +
           'data-l10n-id="resume">Resume</button>',
         '</menu>',
@@ -194,7 +209,6 @@ suite('system/AppInstallManager >', function() {
     fakeImeListTemplate = document.createElement('div');
     fakeImeListTemplate.id = 'ime-list-template';
     fakeImeListTemplate.innerHTML = [
-      '<div id="ime-list-template">',
         '<!--',
         '<li>',
           '<a>${displayName}</a>',
@@ -203,8 +217,7 @@ suite('system/AppInstallManager >', function() {
             '<span></span>',
           '</label>',
         '</li>',
-        '-->',
-      '</div>'
+        '-->'
     ].join('');
 
     document.body.appendChild(fakeDialog);
@@ -320,6 +333,15 @@ suite('system/AppInstallManager >', function() {
       test('should fill the message with app name', function() {
         assert.equal(AppInstallManager.msg.textContent,
           'install-app{"name":"Fake app"}');
+      });
+
+      test('the dialog should be hidden after press home', function() {
+        var evt = {
+          type: 'home'
+        };
+        assert.equal('visible', AppInstallManager.dialog.className);
+        AppInstallManager.handleHomeButtonPressed(evt);
+        assert.notEqual('visible', AppInstallManager.dialog.className);
       });
 
       test('should use the mini manifest if no manifest', function() {
@@ -496,6 +518,17 @@ suite('system/AppInstallManager >', function() {
               AppInstallManager.installCancelDialog.className);
             assert.equal('', AppInstallManager.dialog.className);
           });
+
+          test('the dialog should be hidden after press home', function() {
+            var evt = {
+              type: 'home'
+            };
+            assert.equal('visible',
+              AppInstallManager.installCancelDialog.className);
+            AppInstallManager.handleHomeButtonPressed(evt);
+            assert.notEqual('visible',
+              AppInstallManager.installCancelDialog.className);
+          });
         });
 
         suite('hide cancel dialog >', function() {
@@ -549,7 +582,13 @@ suite('system/AppInstallManager >', function() {
       var evtName = 'applicationuninstall';
       var partialApp = {
         manifestURL: mockApp.manifestURL,
-        origin: mockApp.origin
+        origin: mockApp.origin,
+        manifest: {},
+        application: {
+          manifest: {
+            icon: null
+          }
+        }
       };
 
       dispatchEvent(evtName, partialApp);
@@ -654,7 +693,7 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should not remove a notification', function() {
-            var method = 'decExternalNotifications';
+            var method = 'removeUnreadNotification';
             assert.isUndefined(MockNotificationScreen.wasMethodCalled[method]);
           });
 
@@ -680,7 +719,7 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should not remove a notification', function() {
-            var method = 'decExternalNotifications';
+            var method = 'removeUnreadNotification';
             assert.isUndefined(MockNotificationScreen.wasMethodCalled[method]);
           });
 
@@ -797,13 +836,14 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should add a notification', function() {
-            var method = 'incExternalNotifications';
+            var method = 'addUnreadNotification';
             assert.equal(fakeNotif.childElementCount, 1);
             assert.ok(MockNotificationScreen.wasMethodCalled[method]);
           });
 
           test('notification should have a message', function() {
-            assert.equal(fakeNotif.querySelector('.message').textContent,
+            assert.equal(
+              fakeNotif.querySelector('.title-container').textContent,
               'downloadingAppMessage{"appName":"Fake hosted app with cache"}');
             assert.equal(fakeNotif.querySelector('progress').textContent,
               'downloadingAppProgressIndeterminate');
@@ -824,7 +864,7 @@ suite('system/AppInstallManager >', function() {
             });
 
             test('should remove the notif', function() {
-              var method = 'decExternalNotifications';
+              var method = 'removeUnreadNotification';
               assert.equal(fakeNotif.childElementCount, 0);
               assert.ok(MockNotificationScreen.wasMethodCalled[method]);
             });
@@ -884,7 +924,7 @@ suite('system/AppInstallManager >', function() {
             });
 
             test('should remove the notif', function() {
-              var method = 'decExternalNotifications';
+              var method = 'removeUnreadNotification';
               assert.equal(fakeNotif.childElementCount, 0);
               assert.ok(MockNotificationScreen.wasMethodCalled[method]);
             });
@@ -941,7 +981,7 @@ suite('system/AppInstallManager >', function() {
         });
 
         test('should add a notification', function() {
-          var method = 'incExternalNotifications';
+          var method = 'addUnreadNotification';
           assert.equal(fakeNotif.childElementCount, 1);
           assert.ok(MockNotificationScreen.wasMethodCalled[method]);
         });
@@ -949,7 +989,7 @@ suite('system/AppInstallManager >', function() {
         test('notification should have a message', function() {
           var expectedText = 'downloadingAppMessage{"appName":"' +
             mockAppName + '"}';
-        assert.equal(fakeNotif.querySelector('.message').textContent,
+        assert.equal(fakeNotif.querySelector('.title-container').textContent,
           expectedText);
         });
 
@@ -1007,7 +1047,7 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should add a notification', function() {
-            var method = 'incExternalNotifications';
+            var method = 'addUnreadNotification';
             assert.equal(fakeNotif.childElementCount, 1);
             assert.ok(MockNotificationScreen.wasMethodCalled[method]);
           });
@@ -1015,7 +1055,7 @@ suite('system/AppInstallManager >', function() {
           test('notification should have a message', function() {
             var expectedText = 'downloadingAppMessage{"appName":"' +
               mockAppName + '"}';
-          assert.equal(fakeNotif.querySelector('.message').textContent,
+          assert.equal(fakeNotif.querySelector('.title-container').textContent,
             expectedText);
           });
 
@@ -1043,7 +1083,7 @@ suite('system/AppInstallManager >', function() {
             });
 
             test('should remove the notif', function() {
-              var method = 'decExternalNotifications';
+              var method = 'removeUnreadNotification';
               assert.equal(fakeNotif.childElementCount, 0);
               assert.ok(MockNotificationScreen.wasMethodCalled[method]);
             });
@@ -1102,7 +1142,7 @@ suite('system/AppInstallManager >', function() {
             });
 
             test('should remove the notif', function() {
-              var method = 'decExternalNotifications';
+              var method = 'removeUnreadNotification';
               assert.equal(fakeNotif.childElementCount, 0);
               assert.ok(MockNotificationScreen.wasMethodCalled[method]);
             });
@@ -1168,7 +1208,7 @@ suite('system/AppInstallManager >', function() {
         });
 
         test('should add a notification', function() {
-          var method = 'incExternalNotifications';
+          var method = 'addUnreadNotification';
           assert.equal(fakeNotif.childElementCount, 1);
           assert.ok(MockNotificationScreen.wasMethodCalled[method]);
         });
@@ -1264,7 +1304,7 @@ suite('system/AppInstallManager >', function() {
     test('should add a notification for the pending app', function() {
       mockApp.mTriggerDownloadProgress(50);
 
-      var method = 'incExternalNotifications';
+      var method = 'addUnreadNotification';
       assert.equal(fakeNotif.childElementCount, 1);
       assert.ok(MockNotificationScreen.wasMethodCalled[method]);
     });
@@ -1272,7 +1312,7 @@ suite('system/AppInstallManager >', function() {
     test('should not add a notification for the installed app', function() {
       installedMockApp.mTriggerDownloadProgress(50);
 
-      var method = 'incExternalNotifications';
+      var method = 'addUnreadNotification';
       assert.equal(fakeNotif.childElementCount, 0);
       assert.isUndefined(MockNotificationScreen.wasMethodCalled[method]);
     });
@@ -1304,6 +1344,8 @@ suite('system/AppInstallManager >', function() {
     var mockApp, mockAppTwo, mockAppName, mockAppTwoName;
     setup(function() {
       AppInstallManager.init();
+      KeyboardManager.isOutOfProcessEnabled = true;
+
       navigator.mozL10n = MockL10n;
       mockAppName = 'Fake keyboard app';
       mockApp = new MockApp({
@@ -1364,8 +1406,20 @@ suite('system/AppInstallManager >', function() {
           permissions: {
             input: {}
           }
-        }
+        },
+        manifestURL: 'app://app2.manifestURL'
       });
+    });
+
+    test('should be uninstalled if disabled', function() {
+      // Disabling keyboard app installation.
+      // Set MockKeyboardManager.isOutOfProcessEnabled to false
+      KeyboardManager.isOutOfProcessEnabled = false;
+
+      this.sinon.spy(navigator.mozApps.mgmt, 'uninstall');
+      AppInstallManager.handleInstallSuccess(mockApp);
+
+      assert.isTrue(navigator.mozApps.mgmt.uninstall.calledOnce);
     });
 
     test('should show setup dialog', function() {
@@ -1390,19 +1444,26 @@ suite('system/AppInstallManager >', function() {
                       setupInstalledAppDialog.classList.contains('visible'));
       AppInstallManager.handleInstallSuccess(mockAppTwo);
       assert.isTrue(AppInstallManager.showSetupDialog.calledOnce);
-      assert.equal(AppInstallManager.setupAppName.textContent,
-        'app-install-success{"appName":"' + mockAppName + '"}');
+
+      var l10nAttrs = MockL10n.getAttributes(
+        AppInstallManager.setupAppName);
+      assert.equal(l10nAttrs.id, 'app-install-success');
+      assert.deepEqual(l10nAttrs.args, {appName: mockAppName});
     });
 
     test('should show setupInstalledAppDialog two times', function() {
       this.sinon.spy(AppInstallManager, 'showSetupDialog');
       AppInstallManager.handleInstallSuccess(mockApp);
-      assert.equal(AppInstallManager.setupAppName.textContent,
-        'app-install-success{"appName":"' + mockAppName + '"}');
+      var l10nAttrs = MockL10n.getAttributes(
+        AppInstallManager.setupAppName);
+      assert.equal(l10nAttrs.id, 'app-install-success');
+      assert.deepEqual(l10nAttrs.args, {appName: mockAppName});
       AppInstallManager.setupCancelButton.click();
       AppInstallManager.handleInstallSuccess(mockAppTwo);
-      assert.equal(AppInstallManager.setupAppName.textContent,
-        'app-install-success{"appName":"' + mockAppTwoName + '"}');
+      var l10nAttrs = MockL10n.getAttributes(
+        AppInstallManager.setupAppName);
+      assert.equal(l10nAttrs.id, 'app-install-success');
+      assert.deepEqual(l10nAttrs.args, {appName: mockAppTwoName});
     });
 
     test('should show ime list', function() {
@@ -1491,6 +1552,26 @@ suite('system/AppInstallManager >', function() {
       assert.equal(0, AppInstallManager.setupQueue.length);
       assert.isFalse(AppInstallManager.
                       imeLayoutDialog.classList.contains('visible'));
+    });
+
+    test('Should enable the layout', function() {
+      this.sinon.spy(AppInstallManager, 'handleImeConfirmAction');
+      this.sinon.spy(KeyboardHelper, 'setLayoutEnabled');
+      this.sinon.spy(KeyboardHelper, 'saveToSettings');
+
+      AppInstallManager.handleInstallSuccess(mockAppTwo);
+      AppInstallManager.setupConfirmButton.click();
+      assert.equal(1, AppInstallManager.setupQueue.length);
+
+      // check the first layout
+      var checkbox = AppInstallManager.imeList.querySelector('input');
+      checkbox.checked = true;
+
+      AppInstallManager.handleImeConfirmAction();
+      sinon.assert.calledWith(KeyboardHelper.setLayoutEnabled,
+                              mockAppTwo.manifestURL, 'english', true);
+
+      sinon.assert.calledOnce(KeyboardHelper.saveToSettings);
     });
   });
 });

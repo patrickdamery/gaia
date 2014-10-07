@@ -32,10 +32,14 @@ var EmergencyCbManager = {
       navigator.mozMobileConnections &&
         navigator.mozMobileConnections[0];
 
+    if (!this._conn) {
+      return;
+    }
+
     // Dom elements
     this.notification =
       document.getElementById('emergency-callback-notification');
-    this.message = this.notification.querySelector('.message');
+    this.message = this.notification.querySelector('.title-container');
     this.notificationTimer = this.notification.querySelector('.timer');
 
     this.toaster = document.getElementById('emergency-callback-toaster');
@@ -169,20 +173,10 @@ var EmergencyCbManager = {
   }
 };
 
-window.addEventListener('localized', function startup(evt) {
-  window.removeEventListener('localized', startup);
-  var settings = window.navigator.mozSettings;
-  if (!settings) {
-    return;
-  }
-
-  // Init EmergencyCbManager only when network type is CDMA.
-  var lock = settings.createLock();
-  var key = 'ril.radio.preferredNetworkType';
-  var request = lock.get(key);
-  request.onsuccess = function() {
-    if (request.result[key] === 'cdma') {
-      EmergencyCbManager.init();
-    }
-  };
-});
+// unit tests call init() manually
+if (navigator.mozL10n) {
+  // Always initialize EmergencyCbManager when start up because only CDMA
+  // connection will fire emergencycbmodechange event and it's harmless to
+  // add listener for other type of network.
+  navigator.mozL10n.once(EmergencyCbManager.init.bind(EmergencyCbManager));
+}

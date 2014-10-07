@@ -1,6 +1,8 @@
+/* global InputParser */
 Calendar.ns('Views').ModifyEvent = (function() {
+  'use strict';
 
-  var InputParser = Calendar.Utils.InputParser;
+  var getTimeL10nLabel = Calendar.Calc.getTimeL10nLabel;
 
   function ModifyEvent(options) {
     this.deleteRecord = this.deleteRecord.bind(this);
@@ -13,18 +15,27 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
     ERROR_PREFIX: 'event-error-',
 
+    formats: {
+      date: 'dateTimeFormat_%x',
+      time: 'shortTimeFormat'
+    },
+
     selectors: {
       element: '#modify-event-view',
       alarmList: '#modify-event-view .alarms',
       form: '#modify-event-view form',
+      endDateLocale: '#end-date-locale',
+      endTimeLocale: '#end-time-locale',
       status: '#modify-event-view section[role="status"]',
       errors: '#modify-event-view .errors',
       primaryButton: '#modify-event-view .save',
       deleteButton: '#modify-event-view .delete-record',
-      cancelButton: '#modify-event-view .cancel'
+      header: '#modify-event-header'
     },
 
     uiSelector: '[name="%"]',
+
+    _duration: 0, // The duration between start and end dates.
 
     _initEvents: function() {
       Calendar.Views.EventBase.prototype._initEvents.apply(this, arguments);
@@ -87,6 +98,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       // Append a new alarm select only if we don't have an empty one
       var allAlarms = this.element.querySelectorAll('[name="alarm[]"]');
+      //jshint boss:true
       for (var i = 0, alarmEl; alarmEl = allAlarms[i]; i++) {
         if (alarmEl.value == 'none') {
           return;
@@ -111,6 +123,15 @@ Calendar.ns('Views').ModifyEvent = (function() {
      * Build the initial list of calendar ids.
      */
     onfirstseen: function() {
+      // we need to notify users (specially automation tests) somehow that the
+      // options are still being loaded from DB, this is very important to
+      // avoid race conditions (eg.  trying to set calendar before list is
+      // built) notice that we also add the class to the markup because on some
+      // really rare occasions "onfirstseen" is called after the EventBase
+      // removed the "loading" class from the root element (seen it happen less
+      // than 1% of the time)
+      this.getEl('calendarId').classList.add(self.LOADING);
+
       var calendarStore = this.app.store('Calendar');
       calendarStore.all(function(err, calendars) {
         if (err) {
@@ -123,6 +144,8 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
         function next() {
           if (!--pending) {
+            self.getEl('calendarId').classList.remove(self.LOADING);
+
             if (self.onafteronfirstseen) {
               self.onafteronfirstseen();
             }
@@ -193,7 +216,14 @@ Calendar.ns('Views').ModifyEvent = (function() {
         var element = this.getEl('calendarId');
 
         option = document.createElement('option');
-        option.text = calendar.remote.name;
+
+        if (id === Calendar.Provider.Local.calendarId) {
+          option.text = navigator.mozL10n.get('calendar-local');
+          option.setAttribute('data-l10n-id', 'calendar-local');
+        } else {
+          option.text = calendar.remote.name;
+        }
+
         option.value = id;
         element.add(option);
 
@@ -284,8 +314,9 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       // can't create without a calendar id
       // because of defaults this should be impossible.
-      if (!data.calendarId)
+      if (!data.calendarId) {
         return;
+      }
 
       var self = this;
       var provider;
@@ -314,7 +345,6 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       function persistEvent() {
         var list = self.element.classList;
-        var redirectTo;
 
         // mark view as 'in progress' so we can style
         // it via css during that time period
@@ -363,7 +393,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       if (this.isSaved()) {
         var self = this;
-        function handleDelete() {
+        var handleDelete = function me_handleDelete() {
           self.provider.deleteEvent(self.event.data, function(err) {
             if (err) {
               self.showErrors(err);
@@ -378,7 +408,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
               self.app.go(view.returnTop());
             });
           });
-        }
+        };
 
         this.provider.eventCapabilities(this.event.data, function(err, caps) {
           if (err) {
@@ -470,6 +500,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       var alarms = this.element.querySelectorAll('[name="alarm[]"]');
       fields.alarms = [];
+      //jshint boss:true
       for (var i = 0, alarm; alarm = alarms[i]; i++) {
         if (alarm.value == 'none') { continue; }
 
@@ -515,10 +546,11 @@ Calendar.ns('Views').ModifyEvent = (function() {
         search = search.substr(1, search.length - 1);
       }
 
+      var field, value;
       // Parse the urlparams.
       var params = Calendar.QueryString.parse(search);
-      for (var field in params) {
-        var value = params[field];
+      for (field in params) {
+        value = params[field];
         switch (field) {
           case ModifyEvent.OverrideableField.START_DATE:
           case ModifyEvent.OverrideableField.END_DATE:
@@ -532,8 +564,8 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       // Override fields on our event.
       var model = this.event;
-      for (var field in ModifyEvent.OverrideableField) {
-        var value = ModifyEvent.OverrideableField[field];
+      for (field in ModifyEvent.OverrideableField) {
+        value = ModifyEvent.OverrideableField[field];
         model[value] = params[value] || model[value];
       }
     },
@@ -561,6 +593,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
 
       var startDate = dateSrc.startDate;
       var endDate = dateSrc.endDate;
+      this._duration = endDate.getTime() - startDate.getTime();
 
       // update the allday status of the view
       var allday = this.getEl('allday');
@@ -569,32 +602,26 @@ Calendar.ns('Views').ModifyEvent = (function() {
         endDate = this.formatEndDate(endDate);
       }
 
-      this.getEl('startDate').value =
-        InputParser.exportDate(startDate);
-      this._updateDateTimeLocale(
+      this.getEl('startDate').value = InputParser.exportDate(startDate);
+      this._setupDateTimeSync(
         'date', 'startDate', 'start-date-locale', startDate);
 
-      this.getEl('endDate').value =
-        InputParser.exportDate(endDate);
-      this._updateDateTimeLocale(
+      this.getEl('endDate').value = InputParser.exportDate(endDate);
+      this._setupDateTimeSync(
         'date', 'endDate', 'end-date-locale', endDate);
 
-      this.getEl('startTime').value =
-        InputParser.exportTime(startDate);
-      this._updateDateTimeLocale(
+      this.getEl('startTime').value = InputParser.exportTime(startDate);
+      this._setupDateTimeSync(
         'time', 'startTime', 'start-time-locale', startDate);
 
-      this.getEl('endTime').value =
-        InputParser.exportTime(endDate);
-      this._updateDateTimeLocale(
+      this.getEl('endTime').value = InputParser.exportTime(endDate);
+      this._setupDateTimeSync(
         'time', 'endTime', 'end-time-locale', endDate);
 
-      this.getEl('description').textContent =
-        model.description;
+      this.getEl('description').textContent = model.description;
 
       // update calendar id
-      this.getEl('calendarId').value =
-        model.calendarId;
+      this.getEl('calendarId').value = model.calendarId;
 
       // calendar display
       var currentCalendar = this.getEl('currentCalendar');
@@ -613,42 +640,89 @@ Calendar.ns('Views').ModifyEvent = (function() {
      * Handling a layer over <input> to have localized
      * date/time
      */
-    _updateDateTimeLocale: function(type, date, target, value) {
-      var _ = navigator.mozL10n.get;
-      var localeFormat = Calendar.App.dateFormat.localeFormat;
-
-      var _formats = {
-        date: _('dateTimeFormat_%x'),
-        time: _('shortTimeFormat')
-      };
-
+    _setupDateTimeSync: function(type, src, target, value) {
       var targetElement = document.getElementById(target);
-      if (!targetElement)
+      if (!targetElement) {
         return;
+      }
+      this._renderDateTimeLocale(type, targetElement, value);
 
-      targetElement.textContent = localeFormat(
-        value, _formats[type]);
+      var callback = type === 'date' ?
+        this._updateDateLocaleOnInput : this._updateTimeLocaleOnInput;
 
-      this.getEl(date).addEventListener('input', function(e) {
-        var selected;
-        var newDate = new Date();
+      this.getEl(src)
+        .addEventListener('input', function(e) {
+          callback.call(this, targetElement, e);
 
-        if (type == 'date') {
-          selected = InputParser.importDate(e.target.value);
-          newDate.setFullYear(selected.year);
-          newDate.setMonth(selected.month);
-          newDate.setDate(selected.date);
-        }
-        if (type == 'time') {
-          selected = InputParser.importTime(e.target.value);
-          newDate.setHours(selected.hours);
-          newDate.setMinutes(selected.minutes);
-          newDate.setSeconds(0);
-        }
+          // We only auto change the end date and end time
+          // when user changes start date or start time,
+          // or end datetime is NOT after start datetime
+          // after changing end date or end time.
+          // Otherwise, we don't auto change end date and end time.
+          if (targetElement.id === 'start-date-locale' ||
+              targetElement.id === 'start-time-locale') {
+            this._setEndDateTimeWithCurrentDuration();
+          } else if (this._getEndDateTime() <= this._getStartDateTime()) {
+            this._setEndDateTimeWithCurrentDuration();
+            this.showErrors({
+              name: type === 'date' ?
+                'start-date-after-end-date' :
+                'start-time-after-end-time'
+            });
+          }
 
-        targetElement.textContent = localeFormat(
-          newDate, _formats[type]);
-      });
+          this._duration = this._getEndDateTime() - this._getStartDateTime();
+        }.bind(this));
+    },
+
+    _setEndDateTimeWithCurrentDuration: function() {
+      var date = new Date(this._getStartDateTime() + this._duration);
+      var endDateLocale = this._findElement('endDateLocale');
+      var endTimeLocale = this._findElement('endTimeLocale');
+      this.getEl('endDate').value = date.toLocaleFormat('%Y-%m-%d');
+      this.getEl('endTime').value = date.toLocaleFormat('%H:%M:%S');
+      this._renderDateTimeLocale('date', endDateLocale, date);
+      this._renderDateTimeLocale('time', endTimeLocale, date);
+    },
+
+    _getStartDateTime: function() {
+      return new Date(this.getEl('startDate').value + 'T' +
+        this.getEl('startTime').value).getTime();
+    },
+
+    _getEndDateTime: function() {
+      return new Date(this.getEl('endDate').value + 'T' +
+        this.getEl('endTime').value).getTime();
+    },
+
+    _renderDateTimeLocale: function(type, targetElement, value) {
+      // we inject the targetElement to make it easier to test
+      var localeFormat = Calendar.App.dateFormat.localeFormat;
+      var formatKey = this.formats[type];
+      if (type === 'time') {
+        formatKey = getTimeL10nLabel(formatKey);
+      }
+      var format = navigator.mozL10n.get(formatKey);
+      targetElement.textContent = localeFormat(value, format);
+      // we need to store the format and date for l10n
+      targetElement.setAttribute('data-l10n-date-format', formatKey);
+      targetElement.dataset.date = value;
+    },
+
+    _updateDateLocaleOnInput: function(targetElement, e) {
+      var selected = InputParser.importDate(e.target.value);
+      // use date constructor to avoid issues, see Bug 966516
+      var date = new Date(selected.year, selected.month, selected.date);
+      this._renderDateTimeLocale('date', targetElement, date);
+    },
+
+    _updateTimeLocaleOnInput: function(targetElement, e) {
+      var selected = InputParser.importTime(e.target.value);
+      var date = new Date();
+      date.setHours(selected.hours);
+      date.setMinutes(selected.minutes);
+      date.setSeconds(0);
+      this._renderDateTimeLocale('time', targetElement, date);
     },
 
     /**
@@ -662,6 +736,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
       var alarmMap = {};
 
       if (this.event.alarms) {
+        //jshint boss:true
         for (var i = 0, alarm; alarm = this.event.alarms[i]; i++) {
           alarmMap[alarm.trigger] = true;
           alarm.layout = isAllDay ? 'allday' : 'standard';
@@ -674,6 +749,7 @@ Calendar.ns('Views').ModifyEvent = (function() {
       settings.getValue(layout + 'AlarmDefault', next.bind(this));
 
       function next(err, value) {
+        //jshint -W040
         if (!this.isSaved() && !alarmMap[value] && !this.event.alarms.length) {
           alarms.push({
             layout: layout,

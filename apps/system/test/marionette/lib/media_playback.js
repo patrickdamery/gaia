@@ -21,8 +21,7 @@ MediaPlaybackContainer.Selector = Object.freeze({
   nowPlayingElement: '.media-playback-nowplaying',
   controlsElement: '.media-playback-controls',
 
-  titleElement: '.title',
-  artistElement: '.artist',
+  trackElement: '.track',
 
   previousTrackElement: '.previous',
   playPauseElement: '.play-pause',
@@ -45,15 +44,9 @@ MediaPlaybackContainer.prototype = {
     );
   },
 
-  get titleElement() {
+  get trackElement() {
     return this.containerElement.findElement(
-      MediaPlaybackContainer.Selector.titleElement
-    );
-  },
-
-  get artistElement() {
-    return this.containerElement.findElement(
-      MediaPlaybackContainer.Selector.artistElement
+      MediaPlaybackContainer.Selector.trackElement
     );
   },
 
@@ -75,12 +68,8 @@ MediaPlaybackContainer.prototype = {
     );
   },
 
-  get titleText() {
-    return this.titleElement.getAttribute('textContent');
-  },
-
-  get artistText() {
-    return this.artistElement.getAttribute('textContent');
+  get trackText() {
+    return this.trackElement.getAttribute('textContent');
   },
 
   waitForContainerShown: function(shouldBeShown) {
@@ -92,8 +81,7 @@ MediaPlaybackContainer.prototype = {
 
   waitForNowPlayingText: function(artist, title) {
     this.client.waitFor(function() {
-      return this.artistText === artist &&
-             this.titleText === title;
+      return this.trackText === title + ' — ' + artist;
     }.bind(this));
   },
 
@@ -102,8 +90,7 @@ MediaPlaybackContainer.prototype = {
   },
 
   get isPlaying() {
-    var className = this.playPauseElement.getAttribute('class');
-    return !(/\bis-paused\b/.test(className));
+    return this.playPauseElement.getAttribute('data-icon') === 'pause';
   },
 
   previousTrack: function() {
@@ -136,9 +123,16 @@ MediaPlayback.prototype = {
   },
 
   get lockscreenContainerElement() {
-    return this.client.findElement(
+    var lockScreenFrame = this.client.findElement('#lockscreen-frame');
+    if (!lockScreenFrame) {
+      throw new Error('--- no lockscreen frame ---');
+    }
+    this.client.switchToFrame(lockScreenFrame);
+    var container = this.client.findElement(
       MediaPlayback.Selector.lockscreenContainerElement
     );
+    this.client.switchToFrame();
+    return container;
   },
 
   openUtilityTray: function() {
@@ -163,13 +157,13 @@ MediaPlayback.prototype = {
 
   lockScreen: function() {
     this.client.executeScript(function() {
-      window.wrappedJSObject.LockScreen.lock();
+      window.wrappedJSObject.System.request('lock', { 'forcibly': true });
     });
   },
 
   unlockScreen: function() {
     this.client.executeScript(function() {
-      window.wrappedJSObject.LockScreen.unlock();
+      window.wrappedJSObject.System.request('unlock', { 'forcibly': true });
     });
   },
 

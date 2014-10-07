@@ -1,8 +1,11 @@
+/*global Factory */
+
 requireLib('oauth_window.js');
 requireLib('provider/abstract.js');
 requireLib('provider/local.js');
 
 suiteGroup('Views.ModifyAccount', function() {
+  'use strict';
 
   var subject;
   var account;
@@ -47,12 +50,12 @@ suiteGroup('Views.ModifyAccount', function() {
         return req;
       }
     };
-  };
+  }
 
   function teardownOauth() {
     Calendar.OAuthWindow = RealOAuth;
     navigator.mozApps = realMozApps;
-  };
+  }
 
   suiteSetup(function() {
     triggerEvent = testSupport.calendar.triggerEvent;
@@ -82,6 +85,10 @@ suiteGroup('Views.ModifyAccount', function() {
     div.id = 'test';
     div.innerHTML = [
       '<div id="modify-account-view">',
+        '<gaia-header id="modify-account-header" action="back">',
+          '<h1>Account</h1>',
+          '<button class="save">Save</button>',
+        '</gaia-header>',
         '<button class="save">save</button>',
         '<button class="cancel">cancel</button>',
         '<button class="delete-cancel">cancel</button>',
@@ -97,12 +104,9 @@ suiteGroup('Views.ModifyAccount', function() {
         '<a class="force-oauth2"></a>',
       '</div>',
       '<section id="oauth2">',
-        '<header>',
-          '<button class="cancel">',
-            '<a>cancel</a>',
-          '</button>',
-          '<h1 class="toolbar"></h1>',
-        '</header>',
+        '<gaia-header id="oauth-header" action="back">',
+          '<h1 class="oauth-browser-title"> </h1>',
+        '</gaia-header>',
         '<div class="browser-container"></div>',
       '</section>'
     ].join('');
@@ -189,7 +193,7 @@ suiteGroup('Views.ModifyAccount', function() {
     setup(function() {
       handler = subject.accountHandler;
       subject.showErrors = function() {
-        showErrorCall = arguments;
+        showErrorCall = Array.slice(arguments);
       };
     });
 
@@ -227,12 +231,12 @@ suiteGroup('Views.ModifyAccount', function() {
       // we don't really need to redirect
       // in the test just confirm that it does
       app.router.show = function() {
-        calledShow = arguments;
+        calledShow = Array.slice(arguments);
       };
 
       // again fake model so we do a fake remove
       store.remove = function() {
-        calledRemove = arguments;
+        calledRemove = Array.slice(arguments);
       };
     });
 
@@ -277,7 +281,7 @@ suiteGroup('Views.ModifyAccount', function() {
     });
 
     test('with updateModel option', function() {
-      subject.fields['user'].value = 'iupdatedu';
+      subject.fields.user.value = 'iupdatedu';
       subject.save({ updateModel: true });
       assert.equal(subject.model.user, 'iupdatedu');
     });
@@ -345,8 +349,6 @@ suiteGroup('Views.ModifyAccount', function() {
     account.fullUrl = 'http://google.com/path/';
 
     subject.updateForm();
-
-    var fields = subject.fields;
 
     assert.equal(fieldValue('user'), 'james');
     assert.equal(fieldValue('password'), '');
@@ -442,7 +444,6 @@ suiteGroup('Views.ModifyAccount', function() {
       });
 
       test('save button', function(done) {
-        var called;
         subject.fields.user.value = 'updated';
 
         subject.accountHandler.send = function(model) {

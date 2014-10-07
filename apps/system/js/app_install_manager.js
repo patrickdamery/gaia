@@ -1,4 +1,31 @@
+/* jshint moz:true */
+/* global ConfirmDialogHelper */
+/* global FtuLauncher */
+/* global KeyboardHelper */
+/* global KeyboardManager */
+/* global LazyLoader */
+/* global ManifestHelper */
+/* global ModalDialog */
+/* global NotificationScreen */
+/* global StatusBar */
+/* global SystemBanner */
+/* global Template */
+/* global UtilityTray */
+/* global applications */
+
 'use strict';
+/* global ModalDialog */
+/* global SystemBanner */
+/* global StatusBar */
+/* global KeyboardManager */
+/* global LazyLoader */
+/* global ManifestHelper */
+/* global FtuLauncher */
+/* global Template */
+/* global NotificationScreen */
+/* global KeyboardHelper */
+/* global UtilityTray */
+/* global applications */
 
 var AppInstallManager = {
   mapDownloadErrorsToMessage: {
@@ -13,6 +40,7 @@ var AppInstallManager = {
   },
 
   init: function ai_init() {
+    this.systemBanner = new SystemBanner();
     this.dialog = document.getElementById('app-install-dialog');
     this.msg = document.getElementById('app-install-message');
     this.size = document.getElementById('app-install-size');
@@ -53,6 +81,9 @@ var AppInstallManager = {
       if (e.detail.type == 'webapps-ask-install') {
         this.handleAppInstallPrompt(e.detail);
       }
+      if (e.detail.type == 'webapps-ask-uninstall') {
+        this.handleAppUninstallPrompt(e.detail);
+      }
     }).bind(this));
 
     window.addEventListener('applicationinstall',
@@ -77,8 +108,9 @@ var AppInstallManager = {
                              this.handleSetupConfirmAction.bind(this);
     this.imeCancelButton.onclick = this.hideIMEList.bind(this);
     this.imeConfirmButton.onclick = this.handleImeConfirmAction.bind(this);
-    // lazy load template.js
-    LazyLoader.load('shared/js/template.js');
+    LazyLoader.load(['shared/js/template.js',
+                     'shared/js/homescreens/confirm_dialog_helper.js']);
+
     // bind these handlers so that we can have only one instance and check
     // them later on
     ['handleDownloadSuccess',
@@ -91,6 +123,13 @@ var AppInstallManager = {
 
     window.addEventListener('applicationready',
         this.handleApplicationReady);
+
+    window.addEventListener('home', this.handleHomeButtonPressed.bind(this));
+  },
+
+  handleHomeButtonPressed: function ai_handleHomeButtonPressed(e) {
+    this.dialog.classList.remove('visible');
+    this.handleInstallCancel();
   },
 
   handleApplicationReady: function ai_handleApplicationReady(e) {
@@ -129,8 +168,9 @@ var AppInstallManager = {
     // updateManifest is used by packaged apps until they are installed
     var manifest = app.manifest ? app.manifest : app.updateManifest;
 
-    if (!manifest)
+    if (!manifest) {
       return;
+    }
 
     this.dialog.classList.add('visible');
 
@@ -167,12 +207,65 @@ var AppInstallManager = {
   },
 
   handleInstall: function ai_handleInstall(evt) {
-    if (evt)
+    if (evt) {
       evt.preventDefault();
-    if (this.installCallback)
+    }
+    if (this.installCallback) {
       this.installCallback();
+    }
     this.installCallback = null;
     this.dialog.classList.remove('visible');
+  },
+
+  handleAppUninstallPrompt: function ai_handleUninstallPrompt(detail) {
+    var app = detail.app;
+    var id = detail.id;
+
+    // updateManifest is used by packaged apps until they are installed
+    var manifest = app.manifest ? app.manifest : app.updateManifest;
+    if (!manifest) {
+      return;
+    }
+
+    // Wrap manifest to get localized properties
+    manifest = new ManifestHelper(manifest);
+
+    var unrecoverable = app.installState === 'pending' &&
+                        !app.downloadAvailable &&
+                        !app.readyToApplyDownload;
+
+    var dialogConfig;
+
+    if (unrecoverable) {
+      dialogConfig = {
+        type: 'unrecoverable',
+        title: 'unrecoverable-error-title',
+        body: 'unrecoverable-error-body',
+        confirm: {
+          title: 'unrecoverable-error-action',
+          cb: () => { this.dispatchResponse(id, 'webapps-uninstall-granted'); }
+        }
+      };
+    } else {
+      var nameObj = { name: manifest.name };
+      dialogConfig = {
+        type: 'remove',
+        title: {id: 'delete-title', args: nameObj},
+        body: {id: 'delete-body', args: nameObj},
+        cancel: {
+          title: 'cancel',
+          cb: () => { this.dispatchResponse(id, 'webapps-uninstall-denied'); }
+        },
+        confirm: {
+          title: 'delete',
+          type: 'danger',
+          cb: () => { this.dispatchResponse(id, 'webapps-uninstall-granted'); }
+        }
+      };
+    }
+
+    var dialog = new ConfirmDialogHelper(dialogConfig);
+    dialog.show(document.body);
   },
 
   prepareForDownload: function ai_prepareForDownload(app) {
@@ -194,6 +287,15 @@ var AppInstallManager = {
   handleInstallSuccess: function ai_handleInstallSuccess(app) {
     var manifest = app.manifest || app.updateManifest;
     var role = manifest.role;
+
+    // We must stop 3rd-party keyboard app from being installed
+    // if the feature is not enabled.
+    if (role === 'input' && !KeyboardManager.isOutOfProcessEnabled) {
+      navigator.mozApps.mgmt.uninstall(app);
+
+      return;
+    }
+
     if (this.configurations[role]) {
       this.setupQueue.push(app);
       this.checkSetupQueue();
@@ -215,7 +317,7 @@ var AppInstallManager = {
     var name = appManifest.name;
     var _ = navigator.mozL10n.get;
     var msg = _('app-install-success', { appName: name });
-    SystemBanner.show(msg);
+    this.systemBanner.show(msg);
   },
 
   checkSetupQueue: function ai_checkSetupQueue() {
@@ -245,9 +347,11 @@ var AppInstallManager = {
     var appName = appManifest.name;
     var appDescription = appManifest.description;
     this.setupAppDescription.textContent = appDescription;
-    navigator.mozL10n.localize(this.setupAppName,
-                              'app-install-success', { appName: appName });
+    navigator.mozL10n.setAttributes(this.setupAppName,
+                                    'app-install-success',
+                                    { appName: appName });
     this.setupInstalledAppDialog.classList.add('visible');
+    window.dispatchEvent(new CustomEvent('applicationsetupdialogshow'));
   },
 
   handleSetupCancelAction: function ai_handleSetupCancelAction() {
@@ -304,12 +408,12 @@ var AppInstallManager = {
   },
 
   handleImeConfirmAction: function ai_handleImeConfirmAction() {
-    var origin = this.setupQueue[0].origin;
+    var manifestURL = this.setupQueue[0].manifestURL;
     var keyboards = this.imeList.getElementsByTagName('input');
     for (var i = 0, l = keyboards.length; i < l; i++) {
       var keyboardIME = keyboards[i];
       if (keyboardIME.checked) {
-        KeyboardHelper.setLayoutEnabled(origin, keyboardIME.value, true);
+        KeyboardHelper.setLayoutEnabled(manifestURL, keyboardIME.value, true);
         KeyboardHelper.saveToSettings();
       }
     }
@@ -333,9 +437,9 @@ var AppInstallManager = {
 
     switch (errorName) {
       case 'INSUFFICIENT_STORAGE':
-        var title = _('not-enough-space'),
-            buttonText = _('ok'),
-            message = _('not-enough-space-message');
+        var title = 'not-enough-space',
+            buttonText = 'ok',
+            message = 'not-enough-space-message';
 
         ModalDialog.alert(title, message, {title: buttonText});
         break;
@@ -345,7 +449,7 @@ var AppInstallManager = {
 
         var key = this.mapDownloadErrorsToMessage[errorName] || 'generic-error';
         var msg = _('app-install-' + key, { appName: name });
-        SystemBanner.show(msg);
+        this.systemBanner.show(msg);
     }
 
     this.onDownloadStop(app);
@@ -399,8 +503,9 @@ var AppInstallManager = {
     }
 
     var newNotif =
-      '<div class="fake-notification">' +
-        '<div class="message"></div>' +
+      '<div class="fake-notification" role="link">' +
+        '<div data-icon="rocket" class="alert"></div>' +
+        '<div class="title-container"></div>' +
         '<progress></progress>' +
       '</div>';
 
@@ -416,7 +521,7 @@ var AppInstallManager = {
       appName: new ManifestHelper(manifest).name
     });
 
-    newNode.querySelector('.message').textContent = message;
+    newNode.querySelector('.title-container').textContent = message;
 
     var progressNode = newNode.querySelector('progress');
     if (app.updateManifest && app.updateManifest.size) {
@@ -425,7 +530,7 @@ var AppInstallManager = {
     }
 
     appInfo.installNotification = newNode;
-    NotificationScreen.incExternalNotifications();
+    NotificationScreen.addUnreadNotification(manifestURL);
   },
 
   getNotificationProgressNode: function ai_getNotificationProgressNode(app) {
@@ -477,7 +582,7 @@ var AppInstallManager = {
 
     node.parentNode.removeChild(node);
     delete appInfo.installNotification;
-    NotificationScreen.decExternalNotifications();
+    NotificationScreen.removeUnreadNotification(manifestURL);
   },
 
   requestWifiLock: function ai_requestWifiLock(app) {
@@ -518,8 +623,9 @@ var AppInstallManager = {
     var _ = navigator.mozL10n.get;
     var units = ['bytes', 'kB', 'MB', 'GB', 'TB', 'PB'];
 
-    if (!bytes)
+    if (!bytes) {
       return '0.00 ' + _(units[0]);
+    }
 
     var e = Math.floor(Math.log(bytes) / Math.log(1024));
     return (bytes / Math.pow(1024, Math.floor(e))).toFixed(2) + ' ' +
@@ -527,15 +633,17 @@ var AppInstallManager = {
   },
 
   showInstallCancelDialog: function ai_showInstallCancelDialog(evt) {
-    if (evt)
+    if (evt) {
       evt.preventDefault();
+    }
     this.installCancelDialog.classList.add('visible');
     this.dialog.classList.remove('visible');
   },
 
   hideInstallCancelDialog: function ai_hideInstallCancelDialog(evt) {
-    if (evt)
+    if (evt) {
       evt.preventDefault();
+    }
     this.dialog.classList.add('visible');
     this.installCancelDialog.classList.remove('visible');
   },
@@ -549,7 +657,7 @@ var AppInstallManager = {
     }
 
     var manifestURL = currentNode.dataset.manifest,
-        app = Applications.getByManifestURL(manifestURL),
+        app = applications.getByManifestURL(manifestURL),
         manifest = app.manifest || app.updateManifest,
         dialog = this.downloadCancelDialog;
 
@@ -565,8 +673,9 @@ var AppInstallManager = {
   },
 
   handleInstallCancel: function ai_handleInstallCancel() {
-    if (this.installCancelCallback)
+    if (this.installCancelCallback) {
       this.installCancelCallback();
+    }
     this.installCancelCallback = null;
     this.installCancelDialog.classList.remove('visible');
   },
@@ -576,7 +685,7 @@ var AppInstallManager = {
     var dialog = this.downloadCancelDialog,
         manifestURL = dialog.dataset.manifest;
     if (manifestURL) {
-      var app = Applications.getByManifestURL(manifestURL);
+      var app = applications.getByManifestURL(manifestURL);
       app && app.cancelDownload();
     }
 

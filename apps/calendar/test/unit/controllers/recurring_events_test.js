@@ -1,9 +1,12 @@
+/*global Factory */
+
 requireLib('models/account.js');
 requireLib('provider/abstract.js');
 requireLib('provider/local.js');
 requireLib('provider/caldav.js');
 
 suiteGroup('Controllers.RecurringEvents', function() {
+  'use strict';
 
   var subject;
   var app;
@@ -174,7 +177,7 @@ suiteGroup('Controllers.RecurringEvents', function() {
 
       subject.queueExpand(date);
       assert.ok(subject.pending);
-      assert.length(expandCalls, 1);
+      assert.lengthOf(expandCalls, 1);
 
       // verify right date is being expanded.
       assert.deepEqual(expandCalls[0][0], date);

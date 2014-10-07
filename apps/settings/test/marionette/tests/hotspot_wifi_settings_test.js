@@ -1,8 +1,14 @@
+'use strict';
 var Settings = require('../app/app'),
     assert = require('assert');
 
 marionette('manipulate hotspot wifi settings', function() {
-  var client = marionette.client();
+  var client = marionette.client({
+    settings: {
+      'ftu.manifestURL': null,
+      'lockscreen.enabled': false
+    }
+  });
   var settingsApp;
   var hotspotPanel;
   var hotspotSettingsPanel;

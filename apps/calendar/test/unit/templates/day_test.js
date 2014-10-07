@@ -1,8 +1,14 @@
-suiteGroup('Templates.Day', function() {
+requireLib('template.js');
+requireLib('templates/date_span.js');
+requireLib('templates/day.js');
+
+suite('Templates.Day', function() {
+  'use strict';
+
   var subject;
   var dynamicClass = 'happy-class';
 
-  suiteSetup(function() {
+  setup(function() {
     subject = Calendar.Templates.Day;
   });
 
@@ -14,15 +20,32 @@ suiteGroup('Templates.Day', function() {
     return subject[type].render(options);
   }
 
-  test('#hour', function() {
+  test('> hour', function() {
+    var date = new Date();
+    date.setHours(1, 0, 0, 0);
+
     var result = renderHTML('hour', {
-      hour: 'fooz',
+      hour: 1,
       items: a()
     });
 
     assert.ok(result);
-    assert.include(result, 'fooz');
     assert.include(result, a());
+    assert.include(result, 'data-l10n-date-format="hour-format24"');
+    assert.include(result, 'data-date="' + date + '"');
+    assert.include(result, 'data-hour="1"');
+  });
+
+  test('> all day', function() {
+    var result = renderHTML('hour', {
+      hour: Calendar.Calc.ALLDAY,
+      items: a()
+    });
+
+    assert.ok(result);
+    assert.include(result, a());
+    assert.include(result, 'data-l10n-id="hour-allday"');
+    assert.include(result, 'data-hour="allday"');
   });
 
   test('#attendee', function() {
@@ -37,8 +60,7 @@ suiteGroup('Templates.Day', function() {
   test('event', function() {
     var result = renderHTML('event', {
       title: 'titlez',
-      location: 'sos',
-      attendees: a()
+      location: 'sos'
     });
 
     assert.ok(result);
@@ -46,7 +68,6 @@ suiteGroup('Templates.Day', function() {
     assert.ok(result.indexOf(dynamicClass) === -1);
     assert.include(result, 'titlez');
     assert.include(result, 'sos');
-    assert.include(result, a());
   });
 
   test('event with classes', function() {

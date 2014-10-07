@@ -1,4 +1,5 @@
 Calendar.ns('Views').EventBase = (function() {
+  'use strict';
 
   function EventBase(options) {
     Calendar.View.apply(this, arguments);
@@ -26,14 +27,14 @@ Calendar.ns('Views').EventBase = (function() {
     DEFAULT_VIEW: '/month/',
 
     _initEvents: function() {
-      this.cancelButton.addEventListener('click', this.cancel);
+      this.header.addEventListener('action', this.cancel);
       this.primaryButton.addEventListener('click', this.primary);
     },
 
     uiSelector: '.%',
 
-    get cancelButton() {
-      return this._findElement('cancelButton');
+    get header() {
+      return this._findElement('header');
     },
 
     get primaryButton() {
@@ -69,7 +70,7 @@ Calendar.ns('Views').EventBase = (function() {
      * Dismiss modification and go back to previous screen.
      */
     cancel: function() {
-      window.back();
+      window.history.back();
     },
 
     /**
@@ -124,8 +125,6 @@ Calendar.ns('Views').EventBase = (function() {
       var changeToken = ++this._changeToken;
 
       var self = this;
-      var model = this.event;
-      var calendar;
 
       this.store.ownersOf(event, fetchOwners);
 
@@ -143,8 +142,9 @@ Calendar.ns('Views').EventBase = (function() {
       }
 
       function fetchEventCaps(err, caps) {
-        if (self._changeToken !== changeToken)
+        if (self._changeToken !== changeToken) {
           return;
+        }
 
         if (err) {
           console.log('Failed to fetch events capabilities', err);
@@ -162,10 +162,13 @@ Calendar.ns('Views').EventBase = (function() {
           self.element.classList.add(self.READONLY);
         }
 
-        classList.remove(self.LOADING);
-
         // inheritance hook...
         self._updateUI();
+
+        // we only remove the loading class after the UI is rendered just to
+        // avoid potential race conditions during marionette tests (trying to
+        // read the data before it's on the DOM)
+        classList.remove(self.LOADING);
 
         if (callback) {
           callback();

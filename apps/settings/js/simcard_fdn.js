@@ -1,5 +1,7 @@
 /* -*- Mode: js; js-indent-level: 2; indent-tabs-mode: nil -*- */
 /* vim: set shiftwidth=2 tabstop=2 autoindent cindent expandtab: */
+/* global SimPinDialog, Settings, MozActivity */
+/* global FdnAuthorizedNumbers, getIccByIndex, console */
 
 'use strict';
 
@@ -33,10 +35,16 @@ var SimFdnLock = {
 
   updateFdnStatus: function spl_updateSimStatus() {
     var self = this;
-    var req = IccHelper.getCardLock('fdn');
+    var iccObj = getIccByIndex();
+    if (!iccObj) {
+      return console.error('Could not retrieve ICC object');
+    }
+
+    var req = iccObj.getCardLock('fdn');
     req.onsuccess = function spl_checkSuccess() {
       var enabled = req.result.enabled;
-      localize(self.simFdnDesc, enabled ? 'enabled' : 'disabled');
+      self.simFdnDesc.setAttribute('data-l10n-id',
+                                   enabled ? 'enabled' : 'disabled');
       self.simFdnCheckBox.disabled = false;
       self.simFdnCheckBox.checked = enabled;
       self.resetPin2Item.hidden = !enabled;
@@ -44,12 +52,13 @@ var SimFdnLock = {
   },
 
   init: function spl_init() {
-    if (!IccHelper) {
-      return;
+    var iccObj = getIccByIndex();
+    if (!iccObj) {
+      return console.error('Could not retrieve ICC object');
     }
 
     var callback = this.updateFdnStatus.bind(this);
-    IccHelper.addEventListener('cardstatechange', callback);
+    iccObj.addEventListener('cardstatechange', callback);
 
     this.pinDialog = new SimPinDialog(this.dialog);
     var self = this;
@@ -59,7 +68,7 @@ var SimFdnLock = {
     this.simFdnCheckBox.disabled = true;
     this.simFdnCheckBox.onchange = function spl_togglePin2() {
       var action = this.checked ? 'enable_fdn' : 'disable_fdn';
-      if (IccHelper.cardState === 'puk2Required') {
+      if (iccObj.cardState === 'puk2Required') {
         action = 'unlock_puk2';
       }
       self.pinDialog.show(action, { onsuccess: callback, oncancel: callback });
@@ -72,10 +81,13 @@ var SimFdnLock = {
     this.updateFdnStatus();
 
     // add|edit|remove|call FDN contact
-
     window.addEventListener('panelready', (function(e) {
       if (e.detail.current === '#call-fdnList') {
         this.renderAuthorizedNumbers();
+      } else if (e.detail.current === '#call-fdnSettings') {
+        // Refresh FDN status when the panel is reloaded, since we could be
+        // dealing with different FDNsettings on dual SIM phones.
+        this.updateFdnStatus();
       }
     }).bind(this));
 
@@ -85,7 +97,7 @@ var SimFdnLock = {
     this.fdnContactNumber.oninput = checkContactInputs;
 
     this.fdnContactButton.onclick = function() { // add FDN contact
-      localize(self.fdnContactTitle, 'fdnAction-add');
+      self.fdnContactTitle.setAttribute('data-l10n-id', 'fdnAction-add');
       self.fdnContactName.value = '';
       self.fdnContactNumber.value = '';
       self.fdnContactSubmit.onclick = function addContact() {
@@ -96,7 +108,8 @@ var SimFdnLock = {
     };
 
     this.fdnActionMenuEdit.onclick = function() { // edit FDN contact
-      localize(self.fdnContactTitle, 'fdnAction-edit');
+      self.fdnContactTitle.setAttribute('data-l10n-id',
+                                        'fdnAction-edit-header');
       self.fdnContactName.value = self.currentContact.name;
       self.fdnContactNumber.value = self.currentContact.number;
       self.fdnContactSubmit.onclick = function editContact() {
@@ -160,11 +173,11 @@ var SimFdnLock = {
     this.currentContact = contact;
     this.fdnActionMenuName.textContent = contact.name;
     this.fdnActionMenuNumber.textContent = contact.number;
-    this.fdnActionMenu.classList.add('visible');
+    this.fdnActionMenu.hidden = false;
   },
 
   hideActionMenu: function() {
-    this.fdnActionMenu.classList.remove('visible');
+    this.fdnActionMenu.hidden = true;
   },
 
 
@@ -200,5 +213,5 @@ var SimFdnLock = {
   }
 };
 
-navigator.mozL10n.ready(SimFdnLock.init.bind(SimFdnLock));
+navigator.mozL10n.once(SimFdnLock.init.bind(SimFdnLock));
 

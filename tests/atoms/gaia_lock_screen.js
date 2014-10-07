@@ -3,57 +3,54 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 'use strict';
+/* globals waitFor, finish */
+/* exported GaiaLockScreen */
 
 var GaiaLockScreen = {
 
   unlock: function() {
-
     let setlock = window.wrappedJSObject.SettingsListener.getSettingsLock();
+    let system = window.wrappedJSObject.System;
     let obj = {'screen.timeout': 0};
     setlock.set(obj);
 
-    window.wrappedJSObject.ScreenManager.turnScreenOn();
-
     waitFor(
       function() {
-        window.wrappedJSObject.LockScreen.unlock(true);
+        system.request('unlock', { forcibly: true });
         waitFor(
           function() {
-            finish(window.wrappedJSObject.LockScreen.locked);
+            finish(system.locked);
           },
           function() {
-            return !window.wrappedJSObject.LockScreen.locked;
+            return !system.locked;
           }
         );
       },
       function() {
-        return !!window.wrappedJSObject.LockScreen;
+        return !!system;
       }
     );
   },
 
   lock: function() {
-
+    let system = window.wrappedJSObject.System;
     let setlock = window.wrappedJSObject.SettingsListener.getSettingsLock();
     let obj = {'screen.timeout': 0};
     setlock.set(obj);
-
-    window.wrappedJSObject.ScreenManager.turnScreenOn();
-
     waitFor(
       function() {
-        window.wrappedJSObject.LockScreen.lock(true);
+      system.request('lock', { forcibly: true });
         waitFor(
           function() {
-            finish(!window.wrappedJSObject.LockScreen.locked);
+            finish(!system.locked);
           },
           function() {
-            return window.wrappedJSObject.LockScreen.locked;
+            return system.locked;
           }
         );
       },
       function() {
-        return !!window.wrappedJSObject.LockScreen;
+        return !!system;
       }
     );
   }

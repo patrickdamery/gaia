@@ -12,18 +12,21 @@ var MimeMapper,
     msgAttachmentDisabledConfirmNode =
                          require('tmpl!./msg/attachment_disabled_confirm.html'),
     common = require('mail_common'),
+    Toaster = require('toaster'),
     model = require('model'),
+    headerCursor = require('header_cursor').cursor,
     evt = require('evt'),
     iframeShims = require('iframe_shims'),
     Marquee = require('marquee'),
     mozL10n = require('l10n!'),
+    queryURI = require('query_uri'),
 
     Cards = common.Cards,
-    Toaster = common.Toaster,
     ConfirmDialog = common.ConfirmDialog,
     displaySubject = common.displaySubject,
     prettyDate = common.prettyDate,
-    prettyFileSize = common.prettyFileSize;
+    prettyFileSize = common.prettyFileSize,
+    mimeToClass = common.mimeToClass;
 var CONTENT_TYPES_TO_CLASS_NAMES = [
     null,
     'msg-body-content',
@@ -55,61 +58,18 @@ function MessageReaderCard(domNode, mode, args) {
   this.domNode = domNode;
   this.messageSuid = args.messageSuid;
 
-  if (args.header) {
-    this._setHeader(args.header);
-  } else {
-    // This assumes latest folder is the one of interest.
-    model.latestOnce('folder', function(folder) {
-      var messagesSlice = model.api.viewFolderMessages(folder);
-
-      function clear() {
-        messagesSlice.die();
-        messagesSlice = null;
-      }
-
-      messagesSlice.onsplice = (function(index, howMany, addedItems,
-                                         requested, moreExpected) {
-
-        // Avoid doing work if get called while in the process of
-        // shutting down.
-        if (!messagesSlice)
-          return;
-
-        if (!this.header && addedItems && addedItems.length) {
-          addedItems.some(function(item) {
-              if (item.id === this.messageSuid) {
-                this._setHeader(item);
-                clear();
-                return true;
-              }
-          }.bind(this));
-
-          // If at the top, and no message was found, then if the UI
-          // wants to go back on missing message, do that now. This
-          // card may have been created from obsolete data, like an
-          // old notification for a message that no longer exists.
-          // This stops atTop since the most likely case for this
-          // entry point is either clicking on a message that is
-          // at the top of the inbox in the HTML cache, or from a
-          // notification for a new message, which would be near
-          // the top.
-          if (messagesSlice && messagesSlice.atTop &&
-              !this.header &&
-              args.backOnMissingMessage) {
-            clear();
-            this.onBack();
-          }
-        }
-
-      }).bind(this);
-    }.bind(this));
-  }
+  this.previousBtn = domNode.getElementsByClassName('msg-up-btn')[0];
+  this.previousIcon = domNode.getElementsByClassName('icon-up')[0];
+  this.nextBtn = domNode.getElementsByClassName('msg-down-btn')[0];
+  this.nextIcon = this.domNode.getElementsByClassName('icon-down')[0];
 
   // The body elements for the (potentially multiple) iframes we created to hold
   // HTML email content.
   this.htmlBodyNodes = [];
 
   this._on('msg-back-btn', 'click', 'onBack', true);
+  this._on('msg-up-btn', 'click', 'onPrevious');
+  this._on('msg-down-btn', 'click', 'onNext');
   this._on('msg-reply-btn', 'click', 'onReplyMenu');
   this._on('msg-delete-btn', 'click', 'onDelete');
   this._on('msg-star-btn', 'click', 'onToggleStar');
@@ -117,16 +77,30 @@ function MessageReaderCard(domNode, mode, args) {
   this._on('msg-envelope-bar', 'click', 'onEnvelopeClick');
   this._on('msg-reader-load-infobar', 'click', 'onLoadBarClick');
 
+  this._emittedContentEvents = false;
   this.disableReply();
 
   this.scrollContainer =
     domNode.getElementsByClassName('scrollregion-below-header')[0];
-
-  // event handler for body change events...
-  this.handleBodyChange = this.handleBodyChange.bind(this);
+  this.loadBar =
+    this.domNode.getElementsByClassName('msg-reader-load-infobar')[0];
+  this.loadBarText =
+    this.domNode.getElementsByClassName('msg-reader-load-infobar-text')[0];
+  this.rootBodyNode = domNode.getElementsByClassName('msg-body-container')[0];
 
   // whether or not we've built the body DOM the first time
   this._builtBodyDom = false;
+
+  // Bind some methods to this so they can be used as event listeners
+  this.handleBodyChange = this.handleBodyChange.bind(this);
+  this.onMessageSuidNotFound = this.onMessageSuidNotFound.bind(this);
+  this.onCurrentMessage = this.onCurrentMessage.bind(this);
+
+  headerCursor.on('messageSuidNotFound', this.onMessageSuidNotFound);
+  headerCursor.latest('currentMessage', this.onCurrentMessage);
+
+  // This should handle the case where we jump right into the reader.
+  headerCursor.setCurrentMessage(this.header);
 }
 MessageReaderCard.prototype = {
   _contextMenuType: {
@@ -136,6 +110,14 @@ MessageReaderCard.prototype = {
     REPLY: 8,
     NEW_MESSAGE: 16
   },
+
+  /**
+   * Inform Cards to not emit startup content events, this card will trigger
+   * them once data from back end has been received and the DOM is up to date
+   * with that data.
+   * @type {Boolean}
+   */
+  skipEmitContentEvents: true,
 
   // Method to help bind event listeners to method names, and ensures
   // a header object before activating the method, to protect the buttons
@@ -156,14 +138,89 @@ MessageReaderCard.prototype = {
     if (!this.header.isRead)
       this.header.setRead(true);
 
-    if (this.hackMutationHeader.isStarred)
-      this.domNode.getElementsByClassName('msg-star-btn')[0].classList
-             .add('msg-btn-active');
+    this.domNode.getElementsByClassName('msg-star-btn')[0].classList
+        .toggle('msg-star-btn-on', this.hackMutationHeader.isStarred);
 
     this.emit('header');
   },
 
   postInsert: function() {
+    this._inDom = true;
+
+    // If have a message that is waiting for the DOM, finish
+    // out the display work.
+    if (this._afterInDomMessage) {
+      this.onCurrentMessage(this._afterInDomMessage);
+      this._afterInDomMessage = null;
+    }
+  },
+
+  told: function(args) {
+    if (args.messageSuid) {
+      this.messageSuid = args.messageSuid;
+    }
+  },
+
+  handleBodyChange: function(evt) {
+    this.buildBodyDom(evt.changeDetails);
+  },
+
+  onBack: function(event) {
+    Cards.removeCardAndSuccessors(this.domNode, 'animate');
+  },
+
+  /**
+   * Broadcast that we need to move previous if there's a previous sibling.
+   *
+   * @param {Event} event previous arrow click event.
+   */
+  onPrevious: function(event) {
+    headerCursor.advance('previous');
+  },
+
+  /**
+   * Broadcast that we need to move next if there's a next sibling.
+   *
+   * @param {Event} event next arrow click event.
+   */
+  onNext: function(event) {
+    headerCursor.advance('next');
+  },
+
+  onMessageSuidNotFound: function(messageSuid) {
+    // If no message was found, then go back. This card
+    // may have been created from obsolete data, like an
+    // old notification for a message that no longer exists.
+    // This stops atTop since the most likely case for this
+    // entry point is either clicking on a message that is
+    // at the top of the inbox in the HTML cache, or from a
+    // notification for a new message, which would be near
+    // the top.
+    if (this.messageSuid === messageSuid) {
+      this.onBack();
+    }
+  },
+
+  /**
+   * Set the message we're reading.
+   *
+   * @param {MessageCursor.CurrentMessage} currentMessage representation of the
+   *     email we're currently reading.
+   */
+  onCurrentMessage: function(currentMessage) {
+    // If the card is not in the DOM yet, do not proceed, as
+    // the iframe work needs to happen once DOM is available.
+    if (!this._inDom) {
+      this._afterInDomMessage = currentMessage;
+      return;
+    }
+
+    // Set our current message.
+    this.messageSuid = null;
+    this._setHeader(currentMessage.header);
+    this.clearDom();
+
+    // Display the header and fetch the body for display.
     this.latestOnce('header', function() {
       // iframes need to be linked into the DOM tree before their
       // contentDocument can be instantiated.
@@ -184,14 +241,17 @@ MessageReaderCard.prototype = {
         //
       }.bind(this));
     }.bind(this));
-  },
 
-  handleBodyChange: function(evt) {
-    this.buildBodyDom(evt.changeDetails);
-  },
+    // Previous.
+    var hasPrevious = currentMessage.siblings.hasPrevious;
+    this.previousBtn.disabled = !hasPrevious;
+    this.previousIcon.classList[hasPrevious ? 'remove' : 'add'](
+      'icon-disabled');
 
-  onBack: function(event) {
-    Cards.removeCardAndSuccessors(this.domNode, 'animate');
+    // Next.
+    var hasNext = currentMessage.siblings.hasNext;
+    this.nextBtn.disabled = !hasNext;
+    this.nextIcon.classList[hasNext ? 'remove' : 'add']('icon-disabled');
   },
 
   reply: function() {
@@ -251,11 +311,13 @@ MessageReaderCard.prototype = {
     });
 
     var otherAddresses = (this.header.to || []).concat(this.header.cc || []);
-    if (this.header.replyTo) {
+    if (this.header.replyTo && this.header.replyTo.author) {
       otherAddresses.push(this.header.replyTo.author);
     }
     for (var i = 0; i < otherAddresses.length; i++) {
-      if (myAddresses.indexOf(otherAddresses[i].address) == -1) {
+      var otherAddress = otherAddresses[i];
+      if (otherAddress.address &&
+          myAddresses.indexOf(otherAddress.address) == -1) {
         return true;
       }
     }
@@ -265,10 +327,12 @@ MessageReaderCard.prototype = {
 
   onReplyMenu: function(event) {
     var contents = msgReplyMenuNode.cloneNode(true);
+    Cards.setStatusColor(contents);
     document.body.appendChild(contents);
 
     // reply menu selection handling
     var formSubmit = (function(evt) {
+      Cards.setStatusColor();
       document.body.removeChild(contents);
       switch (evt.explicitOriginalTarget.className) {
       case 'msg-reply-menu-reply':
@@ -287,11 +351,6 @@ MessageReaderCard.prototype = {
     }).bind(this);
     contents.addEventListener('submit', formSubmit);
 
-    if (!this.canForward()) {
-      contents.querySelector('.msg-reply-menu-forward')
-        .classList.add('collapsed');
-    }
-
     if (!this.canReplyAll()) {
       contents.querySelector('.msg-reply-menu-reply-all')
         .classList.add('collapsed');
@@ -300,13 +359,15 @@ MessageReaderCard.prototype = {
 
   onDelete: function() {
     var dialog = msgDeleteConfirmNode.cloneNode(true);
+    var content = dialog.getElementsByTagName('p')[0];
+    mozL10n.setAttributes(content, 'message-edit-delete-confirm');
     ConfirmDialog.show(dialog,
       { // Confirm
         id: 'msg-delete-ok',
         handler: function() {
           var op = this.header.deleteMessage();
-          Toaster.logMutation(op, true);
           Cards.removeCardAndSuccessors(this.domNode, 'animate');
+          Toaster.toastOperation(op);
         }.bind(this)
       },
       { // Cancel
@@ -318,10 +379,8 @@ MessageReaderCard.prototype = {
 
   onToggleStar: function() {
     var button = this.domNode.getElementsByClassName('msg-star-btn')[0];
-    if (!this.hackMutationHeader.isStarred)
-      button.classList.add('msg-btn-active');
-    else
-      button.classList.remove('msg-btn-active');
+    button.classList.toggle('msg-star-btn-on',
+                            !this.hackMutationHeader.isStarred);
 
     this.hackMutationHeader.isStarred = !this.hackMutationHeader.isStarred;
     this.header.setStarred(this.hackMutationHeader.isStarred);
@@ -331,8 +390,8 @@ MessageReaderCard.prototype = {
     //TODO: Please verify move functionality after api landed.
     Cards.folderSelector(function(folder) {
       var op = this.header.moveMessage(folder);
-      Toaster.logMutation(op, true);
       Cards.removeCardAndSuccessors(this.domNode, 'animate');
+      Toaster.toastOperation(op);
     }.bind(this));
   },
 
@@ -468,8 +527,7 @@ MessageReaderCard.prototype = {
 
   onLoadBarClick: function(event) {
     var self = this;
-    var loadBar =
-          this.domNode.getElementsByClassName('msg-reader-load-infobar')[0];
+    var loadBar = this.loadBar;
     if (!this.body.embeddedImagesDownloaded) {
       this.body.downloadEmbeddedImages(function() {
         // this gets nulled out when we get killed, so use this to bail.
@@ -569,6 +627,7 @@ MessageReaderCard.prototype = {
             name: 'open',
             data: {
               type: mappedType,
+              filename: attachment.filename,
               blob: blob
             }
           });
@@ -589,12 +648,42 @@ MessageReaderCard.prototype = {
   onHyperlinkClick: function(event, linkNode, linkUrl, linkText) {
     var dialog = msgBrowseConfirmNode.cloneNode(true);
     var content = dialog.getElementsByTagName('p')[0];
-    content.textContent = mozL10n.get('browse-to-url-prompt', { url: linkUrl });
+    mozL10n.setAttributes(content, 'browse-to-url-prompt', { url: linkUrl });
     ConfirmDialog.show(dialog,
       { // Confirm
         id: 'msg-browse-ok',
         handler: function() {
-          window.open(linkUrl, '_blank');
+          if (/^mailto:/i.test(linkUrl)) {
+            // Fast path to compose. Works better than an activity, since
+            // "canceling" the activity has freaky consequences: what does it
+            // mean to cancel ourselves? What is the sound of one hand clapping?
+            var data = queryURI(linkUrl);
+            Cards.pushCard('compose', 'default', 'animate', {
+              composerData: {
+                onComposer: function(composer, composeCard) {
+                  // Copy the to, cc, bcc, subject, body to the compose.
+                  // It is OK to do this blind key copy since queryURI
+                  // explicitly only populates expected fields, does not blindly
+                  // accept input from the outside, and the queryURI properties
+                  // match the property names allowed on composer.
+                  Object.keys(data).forEach(function(key) {
+                    composer[key] = data[key];
+                  });
+                }
+              }
+            });
+          } else {
+            // Pop out to what is likely the browser, or the user's preferred
+            // viewer for the URL. This keeps the URL out of our cookie jar/data
+            // space too.
+            new MozActivity({
+              name: 'view',
+              data: {
+                type: 'url',
+                url: linkUrl
+              }
+            });
+          }
         }.bind(this)
       },
       { // Cancel
@@ -666,6 +755,9 @@ MessageReaderCard.prototype = {
         return;
       }
 
+      // Make sure it is not hidden from a next/prev action.
+      lineNode.classList.remove('collapsed');
+
       // Because we can avoid having to do multiple selector lookups, we just
       // mutate the template in-place...
       var peepTemplate = msgPeepBubbleNode;
@@ -694,6 +786,33 @@ MessageReaderCard.prototype = {
                    header);
   },
 
+  clearDom: function() {
+    var domNode = this.domNode;
+    if (!domNode) {
+      // Nothing to do!
+      return;
+    }
+
+    // Clear header emails.
+    Array.slice(domNode.querySelectorAll('.msg-peep-bubble')).forEach(
+      function(node) {
+        node.parentNode.removeChild(node);
+      }
+    );
+
+    // Nuke rendered attachments.
+    var attachmentsContainer =
+      domNode.getElementsByClassName('msg-attachments-container')[0];
+    attachmentsContainer.innerHTML = '';
+
+    // Nuke existing body, show progress while waiting
+    // for message to load.
+    this.rootBodyNode.innerHTML = '<progress></progress>';
+
+    // Make sure load bar is not shown between loads too.
+    this.loadBar.classList.add('collapsed');
+  },
+
   /**
    * Render the DOM nodes for bodyReps and the attachments container.
    * If we have information on which parts of the message changed,
@@ -704,10 +823,9 @@ MessageReaderCard.prototype = {
    * @param {array} changeDetails.attachments An array of changed item indexes.
    */
   buildBodyDom: function(/* optional */ changeDetails) {
-    var body = this.body;
-    var domNode = this.domNode;
-
-    var rootBodyNode = domNode.getElementsByClassName('msg-body-container')[0],
+    var body = this.body,
+        domNode = this.domNode,
+        rootBodyNode = this.rootBodyNode,
         reps = body.bodyReps,
         hasExternalImages = false,
         showEmbeddedImages = body.embeddedImageCount &&
@@ -783,17 +901,15 @@ MessageReaderCard.prototype = {
     // The image logic checks embedded image counts, so this should be
     // able to run every time:
     // -- HTML-referenced Images
-    var loadBar = domNode.getElementsByClassName('msg-reader-load-infobar')[0];
+    var loadBar = this.loadBar;
     if (body.embeddedImageCount && !body.embeddedImagesDownloaded) {
       loadBar.classList.remove('collapsed');
-      loadBar.textContent =
-        mozL10n.get('message-download-images',
-                    { n: body.embeddedImageCount });
+      mozL10n.setAttributes(this.loadBarText, 'message-download-images-tap',
+                            { n: body.embeddedImageCount });
     }
     else if (hasExternalImages) {
       loadBar.classList.remove('collapsed');
-      loadBar.textContent =
-        mozL10n.get('message-show-external-images');
+      mozL10n.setAttributes(this.loadBarText, 'message-show-external-images');
     }
     else {
       loadBar.classList.add('collapsed');
@@ -811,6 +927,10 @@ MessageReaderCard.prototype = {
     var attachmentsContainer =
       domNode.getElementsByClassName('msg-attachments-container')[0];
     if (body.attachments && body.attachments.length) {
+      // If buildBodyDom is called multiple times, the attachment
+      // state might change, so we must ensure the attachment list is
+      // not collapsed if we now have attachments.
+      attachmentsContainer.classList.remove('collapsed');
       // We need MimeMapper to help us determining the downloadable attachments
       // but it might not be loaded yet, so load before use it
       require(['shared/js/mime_mapper'], function(mapper) {
@@ -840,24 +960,42 @@ MessageReaderCard.prototype = {
           var attachment = body.attachments[iAttach], state;
           var extension = attachment.filename.split('.').pop();
 
-          if (attachment.isDownloaded)
+          var MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
+          var attachmentDownloadable = true;
+          var mimeClass = mimeToClass(attachment.mimetype ||
+                          MimeMapper.guessTypeFromExtension(extension));
+
+          if (attachment.isDownloaded) {
             state = 'downloaded';
-          else if (MimeMapper.isSupportedType(attachment.mimetype) ||
-                   MimeMapper.isSupportedExtension(extension))
-            state = 'downloadable';
-          else
+          } else if (!attachment.isDownloadable) {
             state = 'nodownload';
+            attachmentDownloadable = false;
+          } else if (attachment.sizeEstimateInBytes > MAX_ATTACHMENT_SIZE) {
+            state = 'toolarge';
+            attachmentDownloadable = false;
+          } else if (MimeMapper.isSupportedType(attachment.mimetype) ||
+                   MimeMapper.isSupportedExtension(extension)) {
+            state = 'downloadable';
+          } else {
+            state = 'nodownload';
+          }
           attTemplate.setAttribute('state', state);
           filenameTemplate.textContent = attachment.filename;
           filesizeTemplate.textContent = prettyFileSize(
             attachment.sizeEstimateInBytes);
 
           var attachmentNode = attTemplate.cloneNode(true);
+          attachmentNode.classList.add(mimeClass);
           attachmentsContainer.replaceChild(attachmentNode, attNode);
-          attachmentNode.getElementsByClassName('msg-attachment-download')[0]
-            .addEventListener('click',
-                              this.onDownloadAttachmentClick.bind(
-                                this, attachmentNode, attachment));
+
+          var downloadButton = attachmentNode.getElementsByClassName(
+            'msg-attachment-download')[0];
+          downloadButton.disabled = !attachmentDownloadable;
+          if (attachmentDownloadable) {
+            downloadButton.addEventListener(
+              'click', this.onDownloadAttachmentClick.bind(
+                this, attachmentNode, attachment));
+          }
           attachmentNode.getElementsByClassName('msg-attachment-view')[0]
             .addEventListener('click',
                               this.onViewAttachmentClick.bind(
@@ -880,9 +1018,20 @@ MessageReaderCard.prototype = {
   enableReply: function() {
     var btn = this.domNode.getElementsByClassName('msg-reply-btn')[0];
     btn.removeAttribute('aria-disabled');
+
+    // Inform that content is ready. Done here because reply is only enabled
+    // once the full body is available.
+    if (!this._emittedContentEvents) {
+      evt.emit('metrics:contentDone');
+      this._emittedContentEvents = true;
+    }
   },
 
   die: function() {
+    headerCursor.removeListener('messageSuidNotFound',
+                                this.onMessageSuidNotFound);
+    headerCursor.removeListener('currentMessage', this.onCurrentMessage);
+
     // Our header was makeCopy()d from the message-list and so needs to be
     // explicitly removed since it is not part of a slice.
     if (this.header) {

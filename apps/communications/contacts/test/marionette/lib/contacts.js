@@ -1,4 +1,4 @@
-var assert = require('assert');
+'use strict';
 
 /**
  * Abstraction around contacts app.
@@ -17,8 +17,9 @@ Contacts.URL = 'app://communications.gaiamobile.org';
 
 Contacts.config = {
   settings: {
-    // disable keyboard ftu because it blocks our display
-    'keyboard.ftu.enabled': false
+    // disable FTU because it blocks our display
+    'ftu.manifestURL': null,
+    'lockscreen.enabled': false
   }
 };
 
@@ -26,46 +27,76 @@ Contacts.Selectors = {
   body: 'body',
   bodyReady: 'body .view-body',
 
+  settingsButton: '#settings-button',
+
   confirmHeader: '#confirmation-message h1',
   confirmBody: '#confirmation-message p',
+  confirmDismiss: '#confirmation-message menu button',
 
   details: '#view-contact-details',
   detailsEditContact: '#edit-contact-button',
   detailsTelLabelFirst: '#phone-details-template-0 h2',
   detailsTelButtonFirst: 'button.icon-call[data-tel]',
+  detailsFindDuplicate: '#contact-detail-inner #find-merge-button',
+  detailsFavoriteButton: '#toggle-favorite',
+  detailsContactName: '#contact-name-title',
+  detailsHeader: '#details-view-header',
 
   duplicateFrame: 'iframe[src*="matching_contacts.html"]',
   duplicateHeader: '#title',
+  duplicateClose: '#merge-close',
+  duplicateMerge: '#merge-action',
+
+  exportButton: '#exportContacts button',
 
   form: '#view-contact-form',
+  formTitle: '#contact-form-title',
   formCustomTag: '#custom-tag',
   formCustomTagPage: '#view-select-tag',
   formCustomTagDone: '#view-select-tag #settings-done',
   formNew: '#add-contact-button',
   formGivenName: '#givenName',
+  formOrg: '#org',
   formFamilyName: '#familyName',
   formSave: '#save-button',
   formTel: '#contacts-form-phones input[type="tel"]',
+  formDelFirstTel: '#add-phone-0 .img-delete-button',
   formTelLabelFirst: '#tel_type_0',
+  formTelNumberSecond: '#number_1',
+  formEmailFirst: '#email_0',
 
+  groupList: ' #groups-list',
   list: '#view-contacts-list',
-  listContactFirst: '.contact-item',
-  listContactFirstText: '.contact-item .contact-text',
+  listContactFirst: 'li:not([data-group="ice"]).contact-item',
+  listContactFirstText: 'li:not([data-group="ice"]).contact-item p',
+  contactListHeader: '#contacts-list-header',
 
   searchLabel: '#search-start',
   searchInput: '#search-contact',
   searchCancel: '#cancel-search',
-  searchResultFirst: '#search-list .contact-item'
-};
+  searchResultFirst: '#search-list .contact-item',
 
-/**
- * @private
- * @param {Marionette.Client} client for selector.
- * @param {String} name of selector [its a key in Contacts.Selectors].
- */
-function findElement(client, name) {
-  return client.findElement(Contacts.Selectors[name]);
-}
+  scrollbar: 'nav[data-type="scrollbar"]',
+  overlay: 'nav[data-type="scrollbar"] p',
+
+  settingsView: '#view-settings',
+  settingsClose: '#settings-close',
+  bulkDelete: '#bulkDelete',
+
+  editForm: '#selectable-form',
+  editMenu: '#select-all-wrapper',
+
+  clearOrgButton: '#clear-org',
+  setIceButton: '#set-ice',
+  iceHeader: '#ice-header',
+  iceSwitch1: '#ice-contacts-1-switch',
+  iceInputSwitch1: '#ice-contacts-1-switch input[type="checkbox"]',
+  iceSwitch2: '#ice-contacts-2-switch',
+  iceButton1: '#select-ice-contact-1',
+  iceButton2: '#select-ice-contact-2',
+  iceGroupOpen: '#section-group-ice',
+  iceContact: '#ice-group .contact-item'
+};
 
 Contacts.prototype = {
   /**
@@ -93,40 +124,55 @@ Contacts.prototype = {
       var data;
       xhr.open('GET', file, false); // Intentional sync
       xhr.onload = function(o) {
-        data = xhr.response;
+        data = JSON.parse(xhr.response);
       };
       xhr.send(null);
       return data;
     }, [file, key]);
 
-    var re = new RegExp(key + '\\s*=\\s*(.*)');
-    var result = re.exec(string)[1];
-    return result;
+    return string[key];
   },
 
   waitSlideLeft: function(elementKey) {
-    this.client.waitFor(function() {
-      var location = this.client.findElement(Contacts.Selectors[elementKey])
-        .location();
-      return location.x === 0;
-    });
+    var element = this.client.findElement(Contacts.Selectors[elementKey]),
+        location;
+    var test = function() {
+      location = element.location();
+      return location.x <= 0;
+    };
+    this.client.waitFor(test);
+  },
+
+  waitForSlideDown: function(element) {
+    var bodyHeight = this.client.findElement(Contacts.Selectors.body).
+      size().height;
+    var test = function() {
+      return element.location().y >= bodyHeight;
+    };
+    this.client.waitFor(test);
+  },
+
+  waitForSlideUp: function(element) {
+    var test = function() {
+      return element.location().y <= 0;
+    };
+    this.client.waitFor(test);
   },
 
   waitForFormShown: function() {
-    this.client.waitFor(function() {
-      var location = this.client.findElement(Contacts.Selectors.form)
-        .location();
-      return location.y === 0;
-    });
+    var form = this.client.helper.waitForElement(Contacts.Selectors.form),
+        location;
+    var test = function() {
+      location = form.location();
+      return location.y <= 0;
+    };
+    this.client.waitFor(test);
   },
 
   waitForFormTransition: function() {
-    var selectors = Contacts.Selectors;
-    var bodyHeight = client.findElement(selectors.body).size().height;
-    this.client.waitFor(function() {
-      var location = client.findElement(selectors.form).location();
-      return location.y >= bodyHeight;
-    });
+    var selectors = Contacts.Selectors,
+        form = this.client.findElement(selectors.form);
+    this.client.helper.waitForElementToDisappear(form);
   },
 
   enterContactDetails: function(details) {
@@ -135,7 +181,8 @@ Contacts.prototype = {
 
     details = details || {
       givenName: 'Hello',
-      familyName: 'Contact'
+      familyName: 'Contact',
+      org: 'Enterprise'
     };
 
     this.waitForFormShown();
@@ -148,7 +195,7 @@ Contacts.prototype = {
         .sendKeys(details[i]);
     }
 
-    this.client.helper.waitForElement(selectors.formSave).click();
+    this.client.findElement(selectors.formSave).click();
 
     this.waitForFormTransition();
   },
@@ -162,6 +209,28 @@ Contacts.prototype = {
     this.enterContactDetails(details);
 
     this.client.helper.waitForElement(selectors.list);
+  },
+
+  /**
+   * Helper method to simulate clicks on iFrames which is not currently
+   *  working in the Marionette JS Runner.
+   * @param {Marionette.Element} element The element to simulate the click on.
+   **/
+  clickOn: function(element) {
+    element.scriptWith(function(elementEl) {
+      var event = new MouseEvent('click', {
+        'view': window,
+        'bubbles': true,
+        'cancelable': true
+      });
+      elementEl.dispatchEvent(event);
+    });
+  },
+
+  getElementStyle: function(selector, type) {
+    return this.client.executeScript(function(selector, type) {
+      return document.querySelector(selector).style[type];
+    }, [selector, type]);
   }
 };
 

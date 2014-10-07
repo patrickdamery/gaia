@@ -1,5 +1,5 @@
 (function(window) {
-  var NUMERIC = /^([0-9]+)$/;
+  'use strict';
 
   /**
    * Creates an abstract store instance.
@@ -10,6 +10,16 @@
     this.db = db;
     this._cached = Object.create(null);
     Calendar.Responder.call(this);
+
+    Calendar.Promise.denodeifyAll(this, [
+      'persist',
+      'all',
+      '_allCached',
+      'removeByIndex',
+      'get',
+      'remove',
+      'count'
+    ]);
   }
 
   Abstract.prototype = {
@@ -53,17 +63,6 @@
           callback(null);
         });
       }
-    },
-
-    probablyParseInt: function(id) {
-      // by an unfortunate decision we have both
-      // string ids and number ids.. based on the
-      // input we run parseInt
-      if (id.match && id.match(NUMERIC)) {
-        return parseInt(id, 10);
-      }
-
-      return id;
     },
 
     /**
@@ -297,7 +296,7 @@
       };
 
       req.onerror = function(event) {
-        callback(e);
+        callback(event);
       };
     },
 
@@ -325,7 +324,7 @@
       var store = trans.objectStore(this._store);
       id = this._parseId(id);
 
-      var req = store.delete(id);
+      store.delete(id);
 
       this._removeDependents(id, trans);
       self.emit('preRemove', id);

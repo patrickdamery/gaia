@@ -1,7 +1,6 @@
 var Gallery = require('./lib/gallery.js'),
     Marionette = require('marionette-client'),
-    assert = require('assert'),
-    TestCommon = require('./lib/test_common');
+    assert = require('assert');
 
 marionette('using the gallery menu', function() {
 
@@ -12,11 +11,21 @@ marionette('using the gallery menu', function() {
       'device.storage.enabled': true,
       'device.storage.testing': true,
       'device.storage.prompt.testing': true
+    },
+    settings: {
+      'ftu.manifestURL': null,
+      'lockscreen.enabled': false
     }
   });
 
   setup(function() {
-    TestCommon.prepareTestSuite('pictures', client);
+    // Remove all files in temp device storage.
+    client.fileManager.removeAllFiles();
+    // Add file into the pictures directory
+    client.fileManager.add({
+      type: 'pictures',
+      filePath: 'test_media/Pictures/firefoxOS.png'
+    });
     app = new Gallery(client);
     actions = new Marionette.Actions(client);
     app.launch();

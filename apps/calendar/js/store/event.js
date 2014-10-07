@@ -1,7 +1,15 @@
 (function(window) {
+  'use strict';
 
   function Events() {
     Calendar.Store.Abstract.apply(this, arguments);
+
+    Calendar.Promise.denodeifyAll(this, [
+      'providerFor',
+      'findByIds',
+      'ownersOf',
+      'eventsForCalendar'
+    ]);
   }
 
   Events.prototype = {
@@ -47,7 +55,8 @@
      */
     _assignId: function(obj) {
       var id = obj.calendarId + '-' + obj.remote.id;
-      return obj._id = id;
+      obj._id = id;
+      return id;
     },
 
     /**

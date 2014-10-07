@@ -20,6 +20,7 @@ body {
   line-height: 2.2rem;
   text-align: center;
   vertical-align: middle;
+  background-color: #FFF;
 }
 
 /* Text conventions */
@@ -150,23 +151,6 @@ legend {
   height: 0;
   overflow: hidden;
   font: 0/0 a;
-}
-
-
-button {
-  height: auto;
-  width: auto;
-  overflow: visible;
-  display: inline-block;
-  vertical-align: middle;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 1.1rem;
-  line-height: 1.3rem;
-  color: #666;
-  white-space: nowrap;
-  cursor: pointer;
 }
 
 button::-moz-focus-inner {
